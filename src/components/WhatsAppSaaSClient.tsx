@@ -48,10 +48,25 @@ interface WhatsAppUser {
   number: string;
 }
 
-// Configuração do servidor - IP PÚBLICO
-const SERVER_IP = '146.59.227.248'; // IP público do servidor
-const SERVER_PORT = '3001';
-const SERVER_URL = `http://${SERVER_IP}:${SERVER_PORT}`;
+// 🔥 CORREÇÃO CRÍTICA: Detectar automaticamente o host correto
+const getServerUrl = () => {
+  const currentHost = window.location.hostname;
+  
+  // Se está acessando via IP público, usar IP público
+  if (currentHost === '146.59.227.248') {
+    return 'http://146.59.227.248:3001';
+  }
+  
+  // Se está acessando via localhost, usar localhost
+  if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
+    return 'http://localhost:3001';
+  }
+  
+  // Fallback para IP público
+  return 'http://146.59.227.248:3001';
+};
+
+const SERVER_URL = getServerUrl();
 
 export const WhatsAppSaaSClient: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'qr' | 'dashboard' | 'messages' | 'contacts' | 'settings'>('qr');
@@ -81,6 +96,7 @@ export const WhatsAppSaaSClient: React.FC = () => {
     if (tenant) {
       setTenantId(tenant);
       console.log('🏢 Tenant ID:', tenant);
+      console.log('🌐 Server URL:', SERVER_URL);
     } else {
       // Se não tem tenant, mostrar erro
       toast.error('ID do cliente não encontrado na URL');
@@ -91,13 +107,13 @@ export const WhatsAppSaaSClient: React.FC = () => {
   useEffect(() => {
     if (!tenantId) return;
 
-    console.log('🔌 Conectando ao servidor WhatsApp SaaS...');
+    console.log('🔌 Conectando ao servidor WhatsApp SaaS...', SERVER_URL);
     const newSocket = io(SERVER_URL);
     setSocket(newSocket);
     setServerStatus('connecting');
 
     newSocket.on('connect', () => {
-      console.log('✅ Conectado ao servidor WhatsApp SaaS!');
+      console.log('✅ Conectado ao servidor WhatsApp SaaS!', SERVER_URL);
       setServerStatus('online');
       
       // Entrar no room do tenant
@@ -376,6 +392,10 @@ export const WhatsAppSaaSClient: React.FC = () => {
                 >
                   <Copy className="w-3 h-3" />
                 </button>
+              </div>
+              <div className="flex items-center space-x-2 mt-1">
+                <span className="text-xs text-gray-500">Servidor:</span>
+                <code className="text-xs bg-blue-100 px-2 py-1 rounded">{SERVER_URL}</code>
               </div>
             </div>
           </div>
@@ -877,6 +897,10 @@ export const WhatsAppSaaSClient: React.FC = () => {
                         </span>
                       </div>
                     )}
+                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <span>URL do Servidor</span>
+                      <code className="text-xs bg-white px-2 py-1 rounded">{SERVER_URL}</code>
+                    </div>
                   </div>
                 </div>
 
