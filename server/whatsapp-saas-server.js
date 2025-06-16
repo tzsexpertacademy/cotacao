@@ -245,21 +245,25 @@ app.post('/api/saas/create-tenant', (req, res) => {
   try {
     createWhatsAppInstance(tenantId);
     
+    // 🔥 CORREÇÃO: SEMPRE usar IP público com porta 5173
+    const accessUrl = `http://146.59.227.248:5173?tenant=${tenantId}`;
+    
     res.json({
       success: true,
       tenantId,
       message: 'Instância WhatsApp criada com sucesso',
-      accessUrl: `http://146.59.227.248:3001/client/${tenantId}`
+      accessUrl: accessUrl
     });
     
     console.log(`🎉 Nova instância criada para cliente: ${tenantId}`);
+    console.log(`🔗 Link do cliente: ${accessUrl}`);
   } catch (error) {
     console.error('Erro ao criar instância:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// 🎯 ROTA CORRIGIDA - NÃO REDIRECIONA MAIS PARA LOCALHOST!
+// 🎯 ROTA CORRIGIDA - Redireciona direto para frontend com tenant
 app.get('/client/:tenantId', (req, res) => {
   const { tenantId } = req.params;
   
@@ -277,15 +281,8 @@ app.get('/client/:tenantId', (req, res) => {
     `);
   }
   
-  // 🔥 CORREÇÃO: Detectar o host da requisição e usar o mesmo!
-  const host = req.get('host') || '146.59.227.248:3001';
-  const protocol = req.protocol || 'http';
-  
-  // Se está sendo acessado via IP público, manter IP público
-  // Se está sendo acessado via localhost, manter localhost
-  const frontendUrl = host.includes('146.59.227.248') 
-    ? `${protocol}://146.59.227.248:5173?tenant=${tenantId}`
-    : `${protocol}://localhost:5173?tenant=${tenantId}`;
+  // 🔥 SEMPRE redirecionar para IP público com porta 5173
+  const frontendUrl = `http://146.59.227.248:5173?tenant=${tenantId}`;
   
   console.log(`🔗 Redirecionando cliente ${tenantId} para: ${frontendUrl}`);
   
@@ -519,7 +516,7 @@ app.get('/', (req, res) => {
                 <strong>Cliente:</strong> ${tenantId}<br>
                 <strong>Status:</strong> ${status?.isReady ? '✅ Conectado' : '⏳ Aguardando'}<br>
                 <strong>Usuário:</strong> ${status?.user?.name || 'N/A'}<br>
-                <a href="/client/${tenantId}" target="_blank">🔗 Acessar Cliente</a>
+                <strong>Link:</strong> <a href="http://146.59.227.248:5173?tenant=${tenantId}" target="_blank">🔗 Acessar Cliente</a>
               </div>
             `;
           }).join('')}
