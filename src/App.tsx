@@ -258,7 +258,7 @@ function App() {
                   Para gerenciar clientes e criar novas instâncias WhatsApp, acesse o painel administrativo.
                 </p>
                 <button
-                  onClick={() => window.open('http://localhost:3001', '_blank')}
+                  onClick={() => window.open('http://146.59.227.248:3001', '_blank')}
                   className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                 >
                   Abrir Painel SaaS
@@ -269,7 +269,7 @@ function App() {
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
               <h4 className="font-medium text-blue-900 mb-2">🚀 Como funciona o SaaS:</h4>
               <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
-                <li>Acesse o painel administrativo em <code>http://localhost:3001</code></li>
+                <li>Acesse o painel administrativo em <code>http://146.59.227.248:3001</code></li>
                 <li>Clique em "Criar Novo Cliente" para gerar uma instância</li>
                 <li>Compartilhe o link gerado com seu cliente</li>
                 <li>Cliente acessa o link e escaneia o QR Code</li>
