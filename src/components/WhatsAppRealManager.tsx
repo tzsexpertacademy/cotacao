@@ -48,8 +48,8 @@ interface WhatsAppUser {
   number: string;
 }
 
-// Configuração do servidor - ALTERE AQUI O IP DO SEU SERVIDOR
-const SERVER_IP = '186.239.127.30'; // Substitua pelo IP do seu servidor
+// Configuração do servidor - IP PÚBLICO
+const SERVER_IP = '146.59.227.248'; // IP público do servidor
 const SERVER_PORT = '3001';
 const SERVER_URL = `http://${SERVER_IP}:${SERVER_PORT}`;
 

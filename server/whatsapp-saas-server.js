@@ -249,7 +249,7 @@ app.post('/api/saas/create-tenant', (req, res) => {
       success: true,
       tenantId,
       message: 'Instância WhatsApp criada com sucesso',
-      accessUrl: `${req.protocol}://${req.get('host')}/client/${tenantId}`
+      accessUrl: `http://146.59.227.248:3001/client/${tenantId}`
     });
     
     console.log(`🎉 Nova instância criada para cliente: ${tenantId}`);
@@ -278,7 +278,7 @@ app.get('/client/:tenantId', (req, res) => {
   }
   
   // Redirecionar para o frontend com o tenant ID
-  res.redirect(`http://localhost:5173?tenant=${tenantId}`);
+  res.redirect(`http://146.59.227.248:5173?tenant=${tenantId}`);
 });
 
 // Rotas da API específicas por tenant
@@ -495,7 +495,8 @@ app.get('/', (req, res) => {
           <h3>📊 Status do Sistema</h3>
           <p><strong>Clientes ativos:</strong> ${clientInstances.size}</p>
           <p><strong>Servidor:</strong> Online ✅</p>
-          <p><strong>Porta:</strong> ${process.env.PORT || 3001}</p>
+          <p><strong>IP:</strong> 146.59.227.248</p>
+          <p><strong>Porta:</strong> 3001</p>
         </div>
 
         <div class="tenant-list">
@@ -575,10 +576,10 @@ io.on('connection', (socket) => {
 // Inicializar servidor
 const PORT = process.env.PORT || 3001;
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor WhatsApp SaaS rodando na porta ${PORT}`);
-  console.log(`🌐 Painel Admin: http://186.239.127.30:${PORT}`);
-  console.log(`📱 Interface Cliente: http://localhost:5173`);
+  console.log(`🌐 Painel Admin: http://146.59.227.248:${PORT}`);
+  console.log(`📱 Interface Cliente: http://146.59.227.248:5173`);
   console.log('');
   console.log('🔥 SISTEMA SAAS MULTI-TENANT PRONTO!');
   console.log('');
