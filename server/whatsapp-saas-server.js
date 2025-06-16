@@ -259,7 +259,7 @@ app.post('/api/saas/create-tenant', (req, res) => {
   }
 });
 
-// Rota para acessar cliente específico
+// 🎯 ROTA CORRIGIDA - NÃO REDIRECIONA MAIS PARA LOCALHOST!
 app.get('/client/:tenantId', (req, res) => {
   const { tenantId } = req.params;
   
@@ -277,8 +277,19 @@ app.get('/client/:tenantId', (req, res) => {
     `);
   }
   
-  // Redirecionar para o frontend com o tenant ID
-  res.redirect(`http://146.59.227.248:5173?tenant=${tenantId}`);
+  // 🔥 CORREÇÃO: Detectar o host da requisição e usar o mesmo!
+  const host = req.get('host') || '146.59.227.248:3001';
+  const protocol = req.protocol || 'http';
+  
+  // Se está sendo acessado via IP público, manter IP público
+  // Se está sendo acessado via localhost, manter localhost
+  const frontendUrl = host.includes('146.59.227.248') 
+    ? `${protocol}://146.59.227.248:5173?tenant=${tenantId}`
+    : `${protocol}://localhost:5173?tenant=${tenantId}`;
+  
+  console.log(`🔗 Redirecionando cliente ${tenantId} para: ${frontendUrl}`);
+  
+  res.redirect(frontendUrl);
 });
 
 // Rotas da API específicas por tenant
