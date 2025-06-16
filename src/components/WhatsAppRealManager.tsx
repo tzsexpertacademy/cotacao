@@ -48,6 +48,11 @@ interface WhatsAppUser {
   number: string;
 }
 
+// Configuração do servidor - ALTERE AQUI O IP DO SEU SERVIDOR
+const SERVER_IP = '186.239.127.30'; // Substitua pelo IP do seu servidor
+const SERVER_PORT = '3001';
+const SERVER_URL = `http://${SERVER_IP}:${SERVER_PORT}`;
+
 export const WhatsAppRealManager: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'qr' | 'dashboard' | 'messages' | 'contacts' | 'settings'>('qr');
   const [isConnected, setIsConnected] = useState(false);
@@ -70,7 +75,7 @@ export const WhatsAppRealManager: React.FC = () => {
   // Conectar ao servidor Socket.IO
   useEffect(() => {
     console.log('🔌 Conectando ao servidor WhatsApp...');
-    const newSocket = io('http://localhost:3001');
+    const newSocket = io(SERVER_URL);
     setSocket(newSocket);
     setServerStatus('connecting');
 
@@ -161,7 +166,7 @@ export const WhatsAppRealManager: React.FC = () => {
 
   const fetchQRCode = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/whatsapp/qr');
+      const response = await fetch(`${SERVER_URL}/api/whatsapp/qr`);
       if (response.ok) {
         const data = await response.json();
         setQrCode(data.qr);
@@ -173,7 +178,7 @@ export const WhatsAppRealManager: React.FC = () => {
 
   const loadChats = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/whatsapp/chats');
+      const response = await fetch(`${SERVER_URL}/api/whatsapp/chats`);
       if (response.ok) {
         const data = await response.json();
         setChats(data);
@@ -186,7 +191,7 @@ export const WhatsAppRealManager: React.FC = () => {
 
   const loadContacts = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/whatsapp/contacts');
+      const response = await fetch(`${SERVER_URL}/api/whatsapp/contacts`);
       if (response.ok) {
         const data = await response.json();
         setContacts(data);
@@ -199,7 +204,7 @@ export const WhatsAppRealManager: React.FC = () => {
 
   const loadChatMessages = async (chatId: string) => {
     try {
-      const response = await fetch(`http://localhost:3001/api/whatsapp/messages/${chatId}`);
+      const response = await fetch(`${SERVER_URL}/api/whatsapp/messages/${chatId}`);
       if (response.ok) {
         const data = await response.json();
         setMessages(data);
@@ -213,7 +218,7 @@ export const WhatsAppRealManager: React.FC = () => {
     if (!selectedChat || !messageText.trim() || !isConnected) return;
 
     try {
-      const response = await fetch('http://localhost:3001/api/whatsapp/send', {
+      const response = await fetch(`${SERVER_URL}/api/whatsapp/send`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -238,7 +243,7 @@ export const WhatsAppRealManager: React.FC = () => {
 
   const restartWhatsApp = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/whatsapp/restart', {
+      const response = await fetch(`${SERVER_URL}/api/whatsapp/restart`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

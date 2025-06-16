@@ -416,7 +416,7 @@ const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`🚀 Servidor WhatsApp REAL rodando na porta ${PORT}`);
   console.log(`🌐 Interface: http://localhost:5173`);
-  console.log(`📱 API: http://localhost:${PORT}`);
+  console.log(`📱 API: http://186.239.127.30:${PORT}`);
   console.log('');
   console.log('🔥 PRONTO PARA CONECTAR SEU WHATSAPP REAL!');
   console.log('');

@@ -48,6 +48,11 @@ interface WhatsAppUser {
   number: string;
 }
 
+// Configuração do servidor - ALTERE AQUI O IP DO SEU SERVIDOR
+const SERVER_IP = '186.239.127.30'; // Substitua pelo IP do seu servidor
+const SERVER_PORT = '3001';
+const SERVER_URL = `http://${SERVER_IP}:${SERVER_PORT}`;
+
 export const WhatsAppSaaSClient: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'qr' | 'dashboard' | 'messages' | 'contacts' | 'settings'>('qr');
   const [isConnected, setIsConnected] = useState(false);
@@ -87,7 +92,7 @@ export const WhatsAppSaaSClient: React.FC = () => {
     if (!tenantId) return;
 
     console.log('🔌 Conectando ao servidor WhatsApp SaaS...');
-    const newSocket = io('http://localhost:3001');
+    const newSocket = io(SERVER_URL);
     setSocket(newSocket);
     setServerStatus('connecting');
 
@@ -186,7 +191,7 @@ export const WhatsAppSaaSClient: React.FC = () => {
     if (!tenantId) return;
     
     try {
-      const response = await fetch(`http://localhost:3001/api/whatsapp/${tenantId}/qr`);
+      const response = await fetch(`${SERVER_URL}/api/whatsapp/${tenantId}/qr`);
       if (response.ok) {
         const data = await response.json();
         setQrCode(data.qr);
@@ -200,7 +205,7 @@ export const WhatsAppSaaSClient: React.FC = () => {
     if (!tenantId) return;
     
     try {
-      const response = await fetch(`http://localhost:3001/api/whatsapp/${tenantId}/chats`);
+      const response = await fetch(`${SERVER_URL}/api/whatsapp/${tenantId}/chats`);
       if (response.ok) {
         const data = await response.json();
         setChats(data);
@@ -215,7 +220,7 @@ export const WhatsAppSaaSClient: React.FC = () => {
     if (!tenantId) return;
     
     try {
-      const response = await fetch(`http://localhost:3001/api/whatsapp/${tenantId}/contacts`);
+      const response = await fetch(`${SERVER_URL}/api/whatsapp/${tenantId}/contacts`);
       if (response.ok) {
         const data = await response.json();
         setContacts(data);
@@ -230,7 +235,7 @@ export const WhatsAppSaaSClient: React.FC = () => {
     if (!tenantId) return;
     
     try {
-      const response = await fetch(`http://localhost:3001/api/whatsapp/${tenantId}/messages/${chatId}`);
+      const response = await fetch(`${SERVER_URL}/api/whatsapp/${tenantId}/messages/${chatId}`);
       if (response.ok) {
         const data = await response.json();
         setMessages(data);
@@ -244,7 +249,7 @@ export const WhatsAppSaaSClient: React.FC = () => {
     if (!selectedChat || !messageText.trim() || !isConnected || !tenantId) return;
 
     try {
-      const response = await fetch(`http://localhost:3001/api/whatsapp/${tenantId}/send`, {
+      const response = await fetch(`${SERVER_URL}/api/whatsapp/${tenantId}/send`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -271,7 +276,7 @@ export const WhatsAppSaaSClient: React.FC = () => {
     if (!tenantId) return;
     
     try {
-      const response = await fetch(`http://localhost:3001/api/whatsapp/${tenantId}/restart`, {
+      const response = await fetch(`${SERVER_URL}/api/whatsapp/${tenantId}/restart`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -336,7 +341,7 @@ export const WhatsAppSaaSClient: React.FC = () => {
             ID do cliente não encontrado na URL. Entre em contato com o suporte para obter um link válido.
           </p>
           <button
-            onClick={() => window.location.href = 'http://localhost:3001'}
+            onClick={() => window.location.href = SERVER_URL}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             Ir para Painel Admin
@@ -897,7 +902,7 @@ export const WhatsAppSaaSClient: React.FC = () => {
                     )}
 
                     <button
-                      onClick={() => window.open('http://localhost:3001', '_blank')}
+                      onClick={() => window.open(SERVER_URL, '_blank')}
                       className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
                     >
                       <ExternalLink className="w-4 h-4" />

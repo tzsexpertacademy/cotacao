@@ -577,7 +577,7 @@ const PORT = process.env.PORT || 3001;
 
 server.listen(PORT, () => {
   console.log(`🚀 Servidor WhatsApp SaaS rodando na porta ${PORT}`);
-  console.log(`🌐 Painel Admin: http://localhost:${PORT}`);
+  console.log(`🌐 Painel Admin: http://186.239.127.30:${PORT}`);
   console.log(`📱 Interface Cliente: http://localhost:5173`);
   console.log('');
   console.log('🔥 SISTEMA SAAS MULTI-TENANT PRONTO!');
