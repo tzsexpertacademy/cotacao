@@ -76,6 +76,7 @@ export const ListaComprasManager: React.FC = () => {
   });
   const [editandoItem, setEditandoItem] = useState<string | null>(null);
   const [novoItem, setNovoItem] = useState<Partial<ItemLista>>({});
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     carregarAnalises();
@@ -89,75 +90,96 @@ export const ListaComprasManager: React.FC = () => {
   }, [analises, filtros]);
 
   const carregarAnalises = () => {
-    const analisesCarregadas = databaseService.getAnalyses();
-    setAnalises(analisesCarregadas);
+    try {
+      const analisesCarregadas = databaseService.getAnalyses();
+      setAnalises(analisesCarregadas);
+      setLoading(false);
+    } catch (error) {
+      console.error('Erro ao carregar análises:', error);
+      toast.error('Erro ao carregar análises');
+      setLoading(false);
+    }
   };
 
   const carregarListas = () => {
-    const listasArmazenadas = localStorage.getItem('listas_compras');
-    if (listasArmazenadas) {
-      setListas(JSON.parse(listasArmazenadas));
+    try {
+      const listasArmazenadas = localStorage.getItem('listas_compras');
+      if (listasArmazenadas) {
+        setListas(JSON.parse(listasArmazenadas));
+      }
+    } catch (error) {
+      console.error('Erro ao carregar listas:', error);
     }
   };
 
   const salvarListas = (novasListas: ListaCompras[]) => {
-    localStorage.setItem('listas_compras', JSON.stringify(novasListas));
-    setListas(novasListas);
+    try {
+      localStorage.setItem('listas_compras', JSON.stringify(novasListas));
+      setListas(novasListas);
+    } catch (error) {
+      console.error('Erro ao salvar listas:', error);
+      toast.error('Erro ao salvar listas');
+    }
   };
 
   const processarOportunidades = () => {
-    const todasOportunidades: any[] = [];
+    try {
+      const todasOportunidades: any[] = [];
 
-    analises.forEach(analise => {
-      try {
-        const resultado = typeof analise.resultado_analise === 'string' 
-          ? JSON.parse(analise.resultado_analise) 
-          : analise.resultado_analise;
+      analises.forEach(analise => {
+        try {
+          const resultado = typeof analise.resultado_analise === 'string' 
+            ? JSON.parse(analise.resultado_analise) 
+            : analise.resultado_analise;
 
-        if (resultado.produtos) {
-          resultado.produtos.forEach((produto: any) => {
-            if (produto.cotacoes && produto.cotacoes.length > 0) {
-              // Encontrar melhor cotação
-              const melhorCotacao = produto.cotacoes.reduce((melhor: any, atual: any) => {
-                const scoreMelhor = (melhor.score_qualidade || 7) + (melhor.score_confiabilidade || 7) - (melhor.preco_total / 1000);
-                const scoreAtual = (atual.score_qualidade || 7) + (atual.score_confiabilidade || 7) - (atual.preco_total / 1000);
-                return scoreAtual > scoreMelhor ? atual : melhor;
-              });
+          if (resultado && resultado.produtos) {
+            resultado.produtos.forEach((produto: any) => {
+              if (produto.cotacoes && produto.cotacoes.length > 0) {
+                // Encontrar melhor cotação
+                const melhorCotacao = produto.cotacoes.reduce((melhor: any, atual: any) => {
+                  const scoreMelhor = (melhor.score_qualidade || 7) + (melhor.score_confiabilidade || 7) - (melhor.preco_total / 1000);
+                  const scoreAtual = (atual.score_qualidade || 7) + (atual.score_confiabilidade || 7) - (atual.preco_total / 1000);
+                  return scoreAtual > scoreMelhor ? atual : melhor;
+                }, produto.cotacoes[0]);
 
-              // Calcular economia
-              const precoMaior = Math.max(...produto.cotacoes.map((c: any) => c.preco_total));
-              const economia = precoMaior - melhorCotacao.preco_total;
-              const economiaPercentual = precoMaior > 0 ? (economia / precoMaior) * 100 : 0;
+                // Calcular economia
+                const precoMaior = Math.max(...produto.cotacoes.map((c: any) => c.preco_total));
+                const economia = precoMaior - melhorCotacao.preco_total;
+                const economiaPercentual = precoMaior > 0 ? (economia / precoMaior) * 100 : 0;
 
-              const oportunidade = {
-                id: `oport_${produto.id}_${melhorCotacao.fornecedor}`,
-                analiseId: analise.id,
-                produtoId: produto.id,
-                descricao: produto.descricao,
-                quantidade: produto.quantidade,
-                melhorCotacao,
-                economia,
-                economiaPercentual,
-                categoria: this.categorizarProduto(produto.descricao),
-                prioridade: this.calcularPrioridade(economia, economiaPercentual, melhorCotacao),
-                recomendadoIA: produto.recomendacao?.fornecedor_recomendado === melhorCotacao.fornecedor,
-                compatibilidadeCatalogo: produto.compatibilidade_catalogo,
-                dataAnalise: analise.data_criacao,
-                todasCotacoes: produto.cotacoes
-              };
+                const oportunidade = {
+                  id: `oport_${produto.id}_${melhorCotacao.fornecedor}`,
+                  analiseId: analise.id,
+                  produtoId: produto.id,
+                  descricao: produto.descricao,
+                  quantidade: produto.quantidade,
+                  melhorCotacao,
+                  economia,
+                  economiaPercentual,
+                  categoria: categorizarProduto(produto.descricao),
+                  prioridade: calcularPrioridade(economia, economiaPercentual, melhorCotacao),
+                  recomendadoIA: produto.recomendacao?.fornecedor_recomendado === melhorCotacao.fornecedor,
+                  compatibilidadeCatalogo: produto.compatibilidade_catalogo,
+                  dataAnalise: analise.data_criacao,
+                  todasCotacoes: produto.cotacoes
+                };
 
-              todasOportunidades.push(oportunidade);
-            }
-          });
+                todasOportunidades.push(oportunidade);
+              }
+            });
+          }
+        } catch (error) {
+          console.error('Erro ao processar análise:', error);
         }
-      } catch (error) {
-        console.error('Erro ao processar análise:', error);
-      }
-    });
+      });
 
-    // Aplicar filtros
-    const oportunidadesFiltradas = this.aplicarFiltros(todasOportunidades);
-    setOportunidades(oportunidadesFiltradas);
+      // Aplicar filtros
+      const oportunidadesFiltradas = aplicarFiltros(todasOportunidades);
+      setOportunidades(oportunidadesFiltradas);
+    } catch (error) {
+      console.error('Erro ao processar oportunidades:', error);
+      toast.error('Erro ao processar oportunidades');
+    }
   };
 
   const categorizarProduto = (descricao: string): string => {
@@ -269,6 +291,7 @@ export const ListaComprasManager: React.FC = () => {
   const adicionarItemNaLista = (oportunidade: any) => {
     if (!listaAtual) {
       criarNovaLista();
+      setTimeout(() => adicionarItemNaLista(oportunidade), 100);
       return;
     }
 
@@ -351,7 +374,12 @@ export const ListaComprasManager: React.FC = () => {
     };
 
     setListaAtual(listaFinalizada);
-    salvarLista();
+    
+    // Salvar a lista finalizada
+    const listasAtualizadas = listas.filter(l => l.id !== listaFinalizada.id);
+    listasAtualizadas.push(listaFinalizada);
+    salvarListas(listasAtualizadas);
+    
     toast.success('Lista finalizada!');
     setActiveTab('resumo');
   };
@@ -485,6 +513,43 @@ Para dúvidas ou esclarecimentos, entre em contato.
     { id: 'resumo' as const, label: 'Resumo', icon: FileText },
     { id: 'envio' as const, label: 'Enviar', icon: Send }
   ];
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando dados...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (analises.length === 0) {
+    return (
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
+        <ShoppingCart className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+        <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma análise disponível</h3>
+        <p className="text-gray-600 mb-4">
+          Faça upload de documentos ou extraia cotações do WhatsApp para começar a criar sua lista de compras.
+        </p>
+        <div className="flex justify-center space-x-4">
+          <button
+            onClick={() => window.location.hash = '#upload'}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Upload de Documentos
+          </button>
+          <button
+            onClick={() => window.location.hash = '#whatsapp-cotacoes'}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+          >
+            Extrair do WhatsApp
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

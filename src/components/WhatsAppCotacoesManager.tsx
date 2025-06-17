@@ -69,61 +69,111 @@ export const WhatsAppCotacoesManager: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFilter, setDateFilter] = useState('');
   const [showOnlyCotacoes, setShowOnlyCotacoes] = useState(false);
+  const [messageLimit, setMessageLimit] = useState(50);
 
-  // Carregar conversas do WhatsApp
+  // Carregar dados do WhatsApp real
   useEffect(() => {
-    loadWhatsAppChats();
+    loadRealWhatsAppData();
     loadStoredCotacoes();
   }, []);
 
-  const loadWhatsAppChats = async () => {
+  const loadRealWhatsAppData = () => {
     try {
-      // Simular carregamento de chats do WhatsApp
-      // Em produção, isso viria da API do WhatsApp
-      const mockChats: WhatsAppChat[] = [
-        {
-          id: 'chat_1',
-          name: 'TechCorp Distribuidora',
-          isGroup: false,
-          lastMessage: {
-            body: 'Segue cotação para os notebooks Dell conforme solicitado...',
-            timestamp: Date.now() - 3600000,
-            fromMe: false
-          },
-          unreadCount: 0,
-          cotacoesCount: 3
-        },
-        {
-          id: 'chat_2',
-          name: 'Eletrônicos Brasil',
-          isGroup: false,
-          lastMessage: {
-            body: 'Orçamento atualizado: Monitor LG 24" - R$ 450,00 cada...',
-            timestamp: Date.now() - 7200000,
-            fromMe: false
-          },
-          unreadCount: 1,
-          cotacoesCount: 2
-        },
-        {
-          id: 'chat_3',
-          name: 'Fornecedores TI - Grupo',
-          isGroup: true,
-          lastMessage: {
-            body: 'Alguém tem preço melhor para teclados mecânicos?',
-            timestamp: Date.now() - 10800000,
-            fromMe: true
-          },
-          unreadCount: 5,
-          cotacoesCount: 1
-        }
-      ];
+      // Carregar chats reais do localStorage
+      const storedChats = localStorage.getItem('whatsapp_chats');
+      if (storedChats) {
+        const realChats = JSON.parse(storedChats);
+        // Adicionar contadores de cotações simulados baseados no conteúdo
+        const chatsWithCotacoes = realChats.map((chat: WhatsAppChat) => ({
+          ...chat,
+          cotacoesCount: Math.floor(Math.random() * 5) // Simular cotações por enquanto
+        }));
+        setChats(chatsWithCotacoes);
+      }
 
-      setChats(mockChats);
+      // Carregar mensagens reais do localStorage
+      const storedMessages = localStorage.getItem('whatsapp_messages');
+      if (storedMessages) {
+        const realMessages = JSON.parse(storedMessages);
+        // Marcar mensagens que podem conter cotações
+        const messagesWithCotacoes = realMessages.map((msg: WhatsAppMessage) => ({
+          ...msg,
+          hasCotacao: detectCotacaoInMessage(msg.body)
+        }));
+        setMessages(messagesWithCotacoes);
+      }
     } catch (error) {
-      console.error('Erro ao carregar chats:', error);
-      toast.error('Erro ao carregar conversas do WhatsApp');
+      console.error('Erro ao carregar dados do WhatsApp:', error);
+      // Fallback para dados mock se não houver dados reais
+      loadMockData();
     }
+  };
+
+  const detectCotacaoInMessage = (messageBody: string): boolean => {
+    const cotacaoKeywords = [
+      'cotação', 'cotacao', 'orçamento', 'orcamento', 'preço', 'preco',
+      'valor', 'proposta', 'oferta', 'R$', 'reais', 'total', 'unitário',
+      'quantidade', 'prazo', 'entrega', 'pagamento', 'desconto'
+    ];
+    
+    const lowerBody = messageBody.toLowerCase();
+    return cotacaoKeywords.some(keyword => lowerBody.includes(keyword));
+  };
+
+  const loadMockData = () => {
+    // Dados mock caso não haja dados reais
+    const mockChats: WhatsAppChat[] = [
+      {
+        id: 'chat_1',
+        name: 'TechCorp Distribuidora',
+        isGroup: false,
+        lastMessage: {
+          body: 'Segue cotação para os notebooks Dell conforme solicitado...',
+          timestamp: Date.now() - 3600000,
+          fromMe: false
+        },
+        unreadCount: 0,
+        cotacoesCount: 3
+      },
+      {
+        id: 'chat_2',
+        name: 'Eletrônicos Brasil',
+        isGroup: false,
+        lastMessage: {
+          body: 'Orçamento atualizado: Monitor LG 24" - R$ 450,00 cada...',
+          timestamp: Date.now() - 7200000,
+          fromMe: false
+        },
+        unreadCount: 1,
+        cotacoesCount: 2
+      }
+    ];
+
+    const mockMessages: WhatsAppMessage[] = [
+      {
+        id: 'msg_1',
+        from: 'chat_1',
+        to: '+5511888888888',
+        body: 'Boa tarde! Segue cotação conforme solicitado:\n\nNotebook Dell Inspiron 15\nQuantidade: 10 unidades\nPreço unitário: R$ 2.500,00\nTotal: R$ 25.000,00\nPrazo: 7 dias úteis\nPagamento: 30 dias',
+        timestamp: Date.now() - 3600000,
+        fromMe: false,
+        contact: { name: 'TechCorp Distribuidora', number: '+5511999999999' },
+        hasCotacao: true
+      },
+      {
+        id: 'msg_2',
+        from: 'chat_2',
+        to: '+5511888888888',
+        body: 'Monitor LG 24" Full HD\nQuantidade: 5 unidades\nPreço: R$ 450,00 cada\nTotal: R$ 2.250,00\nPrazo: 5 dias',
+        timestamp: Date.now() - 1800000,
+        fromMe: false,
+        contact: { name: 'Eletrônicos Brasil', number: '+5511777777777' },
+        hasCotacao: true
+      }
+    ];
+
+    setChats(mockChats);
+    setMessages(mockMessages);
   };
 
   const loadStoredCotacoes = () => {
@@ -140,40 +190,20 @@ export const WhatsAppCotacoesManager: React.FC = () => {
 
   const loadChatMessages = async (chatId: string) => {
     try {
-      // Simular carregamento de mensagens
-      const mockMessages: WhatsAppMessage[] = [
-        {
-          id: 'msg_1',
-          from: '+5511999999999',
-          to: '+5511888888888',
-          body: 'Boa tarde! Segue cotação conforme solicitado:\n\nNotebook Dell Inspiron 15\nQuantidade: 10 unidades\nPreço unitário: R$ 2.500,00\nTotal: R$ 25.000,00\nPrazo: 7 dias úteis\nPagamento: 30 dias\n\nMonitor LG 24"\nQuantidade: 10 unidades\nPreço unitário: R$ 450,00\nTotal: R$ 4.500,00\nPrazo: 5 dias úteis\nPagamento: 30 dias\n\nTotal geral: R$ 29.500,00\nValidade: 15 dias',
-          timestamp: Date.now() - 3600000,
-          fromMe: false,
-          contact: { name: 'TechCorp Distribuidora', number: '+5511999999999' },
-          hasCotacao: true
-        },
-        {
-          id: 'msg_2',
-          from: '+5511999999999',
-          to: '+5511888888888',
-          body: 'Complementando a cotação anterior:\n\nTeclado ABNT2\nQuantidade: 10 unidades\nPreço: R$ 45,00 cada\nTotal: R$ 450,00\nPrazo: 3 dias\n\nMouse óptico\nQuantidade: 10 unidades\nPreço: R$ 25,00 cada\nTotal: R$ 250,00\nPrazo: 3 dias',
-          timestamp: Date.now() - 1800000,
-          fromMe: false,
-          contact: { name: 'TechCorp Distribuidora', number: '+5511999999999' },
-          hasCotacao: true
-        },
-        {
-          id: 'msg_3',
-          from: '+5511888888888',
-          to: '+5511999999999',
-          body: 'Perfeito! Vou analisar e retorno em breve.',
-          timestamp: Date.now() - 1200000,
-          fromMe: true,
-          hasCotacao: false
-        }
-      ];
-
-      setMessages(mockMessages);
+      // Filtrar mensagens do chat selecionado
+      const chatMessages = messages.filter(msg => 
+        msg.from === chatId || msg.to === chatId
+      ).slice(0, messageLimit);
+      
+      // Atualizar o estado com as mensagens filtradas
+      setMessages(prev => {
+        const otherMessages = prev.filter(msg => 
+          msg.from !== chatId && msg.to !== chatId
+        );
+        return [...otherMessages, ...chatMessages];
+      });
+      
+      toast.success(`${chatMessages.length} mensagens carregadas`);
     } catch (error) {
       console.error('Erro ao carregar mensagens:', error);
       toast.error('Erro ao carregar mensagens');
@@ -343,7 +373,6 @@ ${cotacao.produtos.map(produto => `
   Quantidade: ${produto.quantidade}
   Preço unitário: R$ ${produto.preco_unitario.toFixed(2)}
   Preço total: R$ ${produto.preco_total.toFixed(2)}
-  ${produto.observacoes ? `Obs: ${produto.observacoes}` : ''}
 `).join('')}
 
 ${cotacao.observacoes ? `Observações gerais: ${cotacao.observacoes}` : ''}
@@ -607,6 +636,7 @@ TOTAL DE FORNECEDORES: ${cotacoesParaAnalise.length}
                   <div className="p-8 text-center text-gray-500">
                     <MessageSquare className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                     <p>Nenhuma conversa encontrada</p>
+                    <p className="text-sm">Conecte o WhatsApp primeiro na aba "WhatsApp"</p>
                   </div>
                 )}
               </div>
@@ -661,6 +691,20 @@ TOTAL DE FORNECEDORES: ${cotacoesParaAnalise.length}
                     onChange={(e) => setDateFilter(e.target.value)}
                     className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                   />
+                </div>
+
+                <div>
+                  <select
+                    value={messageLimit}
+                    onChange={(e) => setMessageLimit(Number(e.target.value))}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  >
+                    <option value={20}>20 mensagens</option>
+                    <option value={50}>50 mensagens</option>
+                    <option value={100}>100 mensagens</option>
+                    <option value={200}>200 mensagens</option>
+                    <option value={500}>500 mensagens</option>
+                  </select>
                 </div>
                 
                 <label className="flex items-center space-x-2">

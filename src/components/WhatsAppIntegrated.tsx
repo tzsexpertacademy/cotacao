@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MessageSquare, QrCode, Wifi, WifiOff, RefreshCw, Send, Users, MessageCircle, User, CheckCircle, AlertTriangle, Smartphone, Copy } from 'lucide-react';
+import { MessageSquare, QrCode, Wifi, WifiOff, RefreshCw, Send, Users, MessageCircle, User, CheckCircle, AlertTriangle, Smartphone, Copy, Trash2 } from 'lucide-react';
 import io from 'socket.io-client';
 import toast from 'react-hot-toast';
 
@@ -63,6 +63,8 @@ export const WhatsAppIntegrated: React.FC = () => {
   const [initializing, setInitializing] = useState(false);
   const [currentServerUrl, setCurrentServerUrl] = useState<string>('');
   const [connectionAttempts, setConnectionAttempts] = useState(0);
+  const [messageLimit, setMessageLimit] = useState(50);
+  const [loadingMessages, setLoadingMessages] = useState(false);
 
   // Gerar ID único para o usuário (em produção viria do login)
   useEffect(() => {
@@ -73,6 +75,54 @@ export const WhatsAppIntegrated: React.FC = () => {
     }
     setUserId(storedUserId);
   }, []);
+
+  // Carregar mensagens salvas
+  useEffect(() => {
+    loadStoredMessages();
+    loadStoredChats();
+  }, []);
+
+  const loadStoredMessages = () => {
+    try {
+      const stored = localStorage.getItem('whatsapp_messages');
+      if (stored) {
+        const parsedMessages = JSON.parse(stored);
+        setMessages(parsedMessages);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar mensagens:', error);
+    }
+  };
+
+  const loadStoredChats = () => {
+    try {
+      const stored = localStorage.getItem('whatsapp_chats');
+      if (stored) {
+        const parsedChats = JSON.parse(stored);
+        setChats(parsedChats);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar chats:', error);
+    }
+  };
+
+  const saveMessages = (newMessages: WhatsAppMessage[]) => {
+    try {
+      localStorage.setItem('whatsapp_messages', JSON.stringify(newMessages));
+      setMessages(newMessages);
+    } catch (error) {
+      console.error('Erro ao salvar mensagens:', error);
+    }
+  };
+
+  const saveChats = (newChats: WhatsAppChat[]) => {
+    try {
+      localStorage.setItem('whatsapp_chats', JSON.stringify(newChats));
+      setChats(newChats);
+    } catch (error) {
+      console.error('Erro ao salvar chats:', error);
+    }
+  };
 
   // Function to try connecting to different server configurations
   const tryConnectToServer = async (serverUrl: string): Promise<boolean> => {
@@ -211,7 +261,8 @@ export const WhatsAppIntegrated: React.FC = () => {
 
     newSocket.on('message', (message: WhatsAppMessage) => {
       console.log('💬 Nova mensagem:', message);
-      setMessages(prev => [message, ...prev]);
+      const newMessages = [message, ...messages];
+      saveMessages(newMessages);
       
       if (!message.fromMe) {
         toast.success(`Nova mensagem de ${message.contact?.name || message.from}`);
@@ -220,7 +271,7 @@ export const WhatsAppIntegrated: React.FC = () => {
 
     newSocket.on('chats', (chatList: WhatsAppChat[]) => {
       console.log(`💬 ${chatList.length} conversas carregadas`);
-      setChats(chatList);
+      saveChats(chatList);
     });
 
     newSocket.on('status', (status: any) => {
@@ -310,10 +361,42 @@ export const WhatsAppIntegrated: React.FC = () => {
       const response = await fetch(`${currentServerUrl}/api/user/${userId}/whatsapp/chats`);
       if (response.ok) {
         const data = await response.json();
-        setChats(data);
+        saveChats(data);
       }
     } catch (error) {
       console.error('Erro ao carregar chats:', error);
+    }
+  };
+
+  const loadChatMessages = async (chatId: string) => {
+    if (!userId || !currentServerUrl) return;
+    
+    setLoadingMessages(true);
+    try {
+      const response = await fetch(`${currentServerUrl}/api/user/${userId}/whatsapp/messages/${chatId}?limit=${messageLimit}`);
+      if (response.ok) {
+        const data = await response.json();
+        // Filtrar mensagens do chat selecionado
+        const chatMessages = data.filter((msg: WhatsAppMessage) => 
+          msg.from === chatId || msg.to === chatId
+        );
+        
+        // Mesclar com mensagens existentes
+        const allMessages = [...messages];
+        chatMessages.forEach((newMsg: WhatsAppMessage) => {
+          if (!allMessages.find(m => m.id === newMsg.id)) {
+            allMessages.push(newMsg);
+          }
+        });
+        
+        saveMessages(allMessages);
+        toast.success(`${chatMessages.length} mensagens carregadas`);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar mensagens:', error);
+      toast.error('Erro ao carregar mensagens');
+    } finally {
+      setLoadingMessages(false);
     }
   };
 
@@ -361,6 +444,11 @@ export const WhatsAppIntegrated: React.FC = () => {
         setMessages([]);
         setChats([]);
         setUser(null);
+        
+        // Limpar dados salvos
+        localStorage.removeItem('whatsapp_messages');
+        localStorage.removeItem('whatsapp_chats');
+        
         toast.success('WhatsApp reiniciado!');
         
         // Buscar novo QR Code após reiniciar
@@ -370,6 +458,33 @@ export const WhatsAppIntegrated: React.FC = () => {
       }
     } catch (error) {
       toast.error('Erro ao reiniciar WhatsApp');
+    }
+  };
+
+  const clearAllData = () => {
+    if (confirm('⚠️ Tem certeza que deseja limpar todos os dados? Esta ação não pode ser desfeita.')) {
+      // Limpar estado
+      setMessages([]);
+      setChats([]);
+      setUser(null);
+      setIsConnected(false);
+      setQrCode(null);
+      
+      // Limpar localStorage
+      localStorage.removeItem('whatsapp_messages');
+      localStorage.removeItem('whatsapp_chats');
+      localStorage.removeItem('whatsapp_user_id');
+      localStorage.removeItem('analyses');
+      localStorage.removeItem('whatsapp_cotacoes');
+      localStorage.removeItem('ai_assistant_config');
+      localStorage.removeItem('listas_compras');
+      
+      toast.success('Todos os dados foram limpos!');
+      
+      // Gerar novo userId
+      const newUserId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      localStorage.setItem('whatsapp_user_id', newUserId);
+      setUserId(newUserId);
     }
   };
 
@@ -443,6 +558,14 @@ export const WhatsAppIntegrated: React.FC = () => {
             >
               <RefreshCw className="w-4 h-4" />
               <span>Reiniciar</span>
+            </button>
+
+            <button
+              onClick={clearAllData}
+              className="flex items-center space-x-2 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Limpar Dados</span>
             </button>
           </div>
         </div>
@@ -723,14 +846,31 @@ export const WhatsAppIntegrated: React.FC = () => {
             <div className="bg-white rounded-lg shadow-sm border border-gray-200">
               <div className="p-4 border-b border-gray-200">
                 <h3 className="text-lg font-semibold text-gray-900">Suas Conversas</h3>
+                <div className="mt-2">
+                  <label className="block text-sm text-gray-600 mb-1">Limite de mensagens:</label>
+                  <select
+                    value={messageLimit}
+                    onChange={(e) => setMessageLimit(Number(e.target.value))}
+                    className="w-full px-3 py-1 border border-gray-300 rounded text-sm"
+                  >
+                    <option value={20}>20 mensagens</option>
+                    <option value={50}>50 mensagens</option>
+                    <option value={100}>100 mensagens</option>
+                    <option value={200}>200 mensagens</option>
+                    <option value={500}>500 mensagens</option>
+                  </select>
+                </div>
               </div>
               <div className="divide-y divide-gray-200 max-h-96 overflow-y-auto">
                 {chats.map((chat) => (
                   <button
                     key={chat.id}
-                    onClick={() => setSelectedChat(chat)}
+                    onClick={() => {
+                      setSelectedChat(chat);
+                      loadChatMessages(chat.id);
+                    }}
                     className={`w-full p-4 text-left hover:bg-gray-50 transition-colors ${
-                      selectedChat?.id === chat.id ? 'bg-green-50 border-r-2 border-green-500' : ''
+                      selectedChat?.id === chat.id ? 'bg-green-50 border-l-4 border-green-500' : ''
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -772,20 +912,29 @@ export const WhatsAppIntegrated: React.FC = () => {
               {selectedChat ? (
                 <>
                   <div className="p-4 border-b border-gray-200">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                        {selectedChat.isGroup ? (
-                          <Users className="w-5 h-5 text-green-600" />
-                        ) : (
-                          <User className="w-5 h-5 text-green-600" />
-                        )}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                          {selectedChat.isGroup ? (
+                            <Users className="w-5 h-5 text-green-600" />
+                          ) : (
+                            <User className="w-5 h-5 text-green-600" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">{selectedChat.name}</p>
+                          <p className="text-sm text-gray-600">
+                            {selectedChat.isGroup ? 'Grupo' : 'Contato'}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-gray-900">{selectedChat.name}</p>
-                        <p className="text-sm text-gray-600">
-                          {selectedChat.isGroup ? 'Grupo' : 'Contato'}
-                        </p>
-                      </div>
+                      
+                      {loadingMessages && (
+                        <div className="flex items-center space-x-2 text-blue-600">
+                          <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                          <span className="text-sm">Carregando...</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -793,7 +942,7 @@ export const WhatsAppIntegrated: React.FC = () => {
                     <div className="space-y-4">
                       {messages
                         .filter(msg => msg.from === selectedChat.id || msg.to === selectedChat.id)
-                        .slice(0, 50)
+                        .slice(0, messageLimit)
                         .reverse()
                         .map((message) => (
                           <div
