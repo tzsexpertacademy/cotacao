@@ -13,8 +13,22 @@ export const ComparacaoTable: React.FC<ComparacaoTableProps> = ({
   filtros, 
   onFiltrosChange 
 }) => {
+  // Garantir que estamos trabalhando com dados reais da análise IA
+  const produtosReais = useMemo(() => {
+    // Se produtos for uma string (JSON), converter para objeto
+    if (typeof produtos === 'string') {
+      try {
+        return JSON.parse(produtos);
+      } catch (error) {
+        console.error('Erro ao converter produtos:', error);
+        return [];
+      }
+    }
+    return produtos;
+  }, [produtos]);
+
   const produtosOrdenados = useMemo(() => {
-    return produtos.map(produto => ({
+    return produtosReais.map(produto => ({
       ...produto,
       cotacoes: [...produto.cotacoes].sort((a, b) => {
         switch (filtros.ordenar_por) {
@@ -29,19 +43,21 @@ export const ComparacaoTable: React.FC<ComparacaoTableProps> = ({
         }
       })
     }));
-  }, [produtos, filtros.ordenar_por]);
+  }, [produtosReais, filtros.ordenar_por]);
 
   const todosFornecedores = useMemo(() => {
     const fornecedores = new Set<string>();
-    produtos.forEach(produto => {
+    produtosReais.forEach(produto => {
       produto.cotacoes.forEach(cotacao => {
         fornecedores.add(cotacao.fornecedor);
       });
     });
     return Array.from(fornecedores);
-  }, [produtos]);
+  }, [produtosReais]);
 
   const getMelhorCotacao = (produto: Produto) => {
+    if (!produto.cotacoes || produto.cotacoes.length === 0) return null;
+    
     let melhor = produto.cotacoes[0];
     produto.cotacoes.forEach(cotacao => {
       if (cotacao.preco_total < melhor.preco_total) {
@@ -154,6 +170,8 @@ export const ComparacaoTable: React.FC<ComparacaoTableProps> = ({
       <div className="space-y-6">
         {produtosOrdenados.map((produto) => {
           const melhorCotacao = getMelhorCotacao(produto);
+          if (!melhorCotacao) return null;
+          
           const cotacoesFiltradas = produto.cotacoes.filter(cotacao => {
             if (filtros.mostrar_apenas_completos && cotacao.dados_incompletos) return false;
             if (filtros.fornecedores_selecionados.length > 0 && 
@@ -212,13 +230,10 @@ export const ComparacaoTable: React.FC<ComparacaoTableProps> = ({
                   const temProblemas = cotacao.dados_incompletos || false;
                   const isRecommended = hasRecommendation?.fornecedor_recomendado === cotacao.fornecedor;
                   
-                  // @ts-ignore - AI scores might not be in type yet
+                  // Scores da IA
                   const scoreQualidade = cotacao.score_qualidade || 7;
-                  // @ts-ignore
                   const scoreConfiabilidade = cotacao.score_confiabilidade || 7;
-                  // @ts-ignore
                   const pontosFortes = cotacao.pontos_fortes || [];
-                  // @ts-ignore
                   const pontosFracos = cotacao.pontos_fracos || [];
 
                   return (

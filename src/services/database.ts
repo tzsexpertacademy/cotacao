@@ -69,6 +69,12 @@ class DatabaseService {
     }
   }
 
+  async clearAllAnalyses(): Promise<void> {
+    if (this.config.type === 'localStorage') {
+      localStorage.removeItem('analyses');
+    }
+  }
+
   async saveWhatsAppQuote(quote: WhatsAppQuote): Promise<void> {
     if (this.config.type === 'localStorage') {
       const quotes = this.getWhatsAppQuotes();

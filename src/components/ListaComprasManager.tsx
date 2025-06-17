@@ -109,6 +109,7 @@ export const ListaComprasManager: React.FC = () => {
       }
     } catch (error) {
       console.error('Erro ao carregar listas:', error);
+      toast.error('Erro ao carregar listas de compras');
     }
   };
 
@@ -118,7 +119,7 @@ export const ListaComprasManager: React.FC = () => {
       setListas(novasListas);
     } catch (error) {
       console.error('Erro ao salvar listas:', error);
-      toast.error('Erro ao salvar listas');
+      toast.error('Erro ao salvar listas de compras');
     }
   };
 
@@ -132,15 +133,18 @@ export const ListaComprasManager: React.FC = () => {
             ? JSON.parse(analise.resultado_analise) 
             : analise.resultado_analise;
 
-          if (resultado && resultado.produtos) {
-            resultado.produtos.forEach((produto: any) => {
+          // Verificar se temos produtos ou se é um objeto com produtos
+          const produtos = resultado.produtos || resultado;
+          
+          if (Array.isArray(produtos)) {
+            produtos.forEach((produto: any) => {
               if (produto.cotacoes && produto.cotacoes.length > 0) {
                 // Encontrar melhor cotação
                 const melhorCotacao = produto.cotacoes.reduce((melhor: any, atual: any) => {
                   const scoreMelhor = (melhor.score_qualidade || 7) + (melhor.score_confiabilidade || 7) - (melhor.preco_total / 1000);
                   const scoreAtual = (atual.score_qualidade || 7) + (atual.score_confiabilidade || 7) - (atual.preco_total / 1000);
                   return scoreAtual > scoreMelhor ? atual : melhor;
-                }, produto.cotacoes[0]);
+                });
 
                 // Calcular economia
                 const precoMaior = Math.max(...produto.cotacoes.map((c: any) => c.preco_total));
@@ -374,12 +378,7 @@ export const ListaComprasManager: React.FC = () => {
     };
 
     setListaAtual(listaFinalizada);
-    
-    // Salvar a lista finalizada
-    const listasAtualizadas = listas.filter(l => l.id !== listaFinalizada.id);
-    listasAtualizadas.push(listaFinalizada);
-    salvarListas(listasAtualizadas);
-    
+    salvarLista();
     toast.success('Lista finalizada!');
     setActiveTab('resumo');
   };
@@ -518,7 +517,7 @@ Para dúvidas ou esclarecimentos, entre em contato.
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-600">Carregando dados...</p>
         </div>
       </div>
@@ -531,20 +530,20 @@ Para dúvidas ou esclarecimentos, entre em contato.
         <ShoppingCart className="w-16 h-16 text-gray-300 mx-auto mb-4" />
         <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma análise disponível</h3>
         <p className="text-gray-600 mb-4">
-          Faça upload de documentos ou extraia cotações do WhatsApp para começar a criar sua lista de compras.
+          Faça upload de documentos ou extraia cotações do WhatsApp para começar a usar a Lista de Compras
         </p>
-        <div className="flex justify-center space-x-4">
+        <div className="flex space-x-4 justify-center">
           <button
-            onClick={() => window.location.hash = '#upload'}
+            onClick={() => window.location.href = '#upload'}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
-            Upload de Documentos
+            Fazer Upload de Documentos
           </button>
           <button
-            onClick={() => window.location.hash = '#whatsapp-cotacoes'}
+            onClick={() => window.location.href = '#whatsapp-cotacoes'}
             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
           >
-            Extrair do WhatsApp
+            Extrair Cotações do WhatsApp
           </button>
         </div>
       </div>

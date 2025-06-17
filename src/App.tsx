@@ -30,34 +30,39 @@ function App() {
         id: a.id,
         nome_analise: a.nome,
         data_criacao: a.data_criacao,
-        produtos: parseAnalysisResult(a.resultado_analise),
-        total_fornecedores: calculateTotalSuppliers(parseAnalysisResult(a.resultado_analise)),
+        produtos: a.resultado_analise,
+        total_fornecedores: calculateTotalSuppliers(a.resultado_analise),
         melhor_custo_beneficio: []
       }));
       setAnalises(analisesConvertidas);
     }
   }, []);
 
-  const parseAnalysisResult = (result: any) => {
+  const calculateTotalSuppliers = (result: any) => {
     try {
-      if (typeof result === 'string') {
-        const parsed = JSON.parse(result);
-        return parsed.produtos || [];
+      // Se for string, converter para objeto
+      const parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
+      
+      // Verificar se temos produtos ou se é um objeto com produtos
+      const produtos = parsedResult.produtos || parsedResult;
+      
+      // Extrair fornecedores únicos
+      const fornecedores = new Set();
+      if (Array.isArray(produtos)) {
+        produtos.forEach((produto: any) => {
+          if (produto.cotacoes) {
+            produto.cotacoes.forEach((cotacao: any) => {
+              fornecedores.add(cotacao.fornecedor);
+            });
+          }
+        });
       }
-      return result?.produtos || [];
-    } catch {
-      return [];
+      
+      return fornecedores.size;
+    } catch (error) {
+      console.error('Erro ao calcular fornecedores:', error);
+      return 0;
     }
-  };
-
-  const calculateTotalSuppliers = (produtos: any[]) => {
-    const fornecedores = new Set();
-    produtos.forEach(produto => {
-      produto.cotacoes?.forEach((cotacao: any) => {
-        fornecedores.add(cotacao.fornecedor);
-      });
-    });
-    return fornecedores.size;
   };
 
   const handleAnalysisComplete = (analysis: any) => {
@@ -65,8 +70,8 @@ function App() {
       id: analysis.id,
       nome_analise: analysis.nome,
       data_criacao: analysis.data_criacao,
-      produtos: parseAnalysisResult(analysis.resultado_analise),
-      total_fornecedores: calculateTotalSuppliers(parseAnalysisResult(analysis.resultado_analise)),
+      produtos: analysis.resultado_analise,
+      total_fornecedores: calculateTotalSuppliers(analysis.resultado_analise),
       melhor_custo_beneficio: []
     };
 
@@ -76,7 +81,11 @@ function App() {
     });
 
     // Navegar para comparação se há produtos
-    if (novaAnalise.produtos.length > 0) {
+    const produtos = typeof novaAnalise.produtos === 'string' 
+      ? JSON.parse(novaAnalise.produtos) 
+      : novaAnalise.produtos;
+      
+    if (produtos && (produtos.length > 0 || produtos.produtos?.length > 0)) {
       setTabAtiva('comparacao');
     }
   };

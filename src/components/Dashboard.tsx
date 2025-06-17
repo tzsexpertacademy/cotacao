@@ -12,13 +12,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ analises }) => {
   const estatisticas = useMemo(() => {
     if (!analiseAtual) return null;
 
-    const totalProdutos = analiseAtual.produtos.length;
-    const totalFornecedores = analiseAtual.total_fornecedores;
+    // Usar apenas dados reais da análise do assistente IA
+    const resultado = typeof analiseAtual.produtos === 'string' 
+      ? JSON.parse(analiseAtual.produtos) 
+      : analiseAtual.produtos;
     
-    const todosProdutos = analiseAtual.produtos;
-    const todasCotacoes = todosProdutos.flatMap(p => p.cotacoes || []);
+    const totalProdutos = resultado.length;
+    
+    // Extrair fornecedores únicos
+    const fornecedores = new Set();
+    resultado.forEach((produto: any) => {
+      if (produto.cotacoes) {
+        produto.cotacoes.forEach((cotacao: any) => {
+          fornecedores.add(cotacao.fornecedor);
+        });
+      }
+    });
+    const totalFornecedores = fornecedores.size;
     
     // Check if we have any cotacoes to work with
+    const todasCotacoes = resultado.flatMap((p: any) => p.cotacoes || []);
     if (todasCotacoes.length === 0) {
       return {
         totalProdutos,
@@ -35,36 +48,38 @@ export const Dashboard: React.FC<DashboardProps> = ({ analises }) => {
       };
     }
     
-    const valorTotalMenor = todosProdutos.reduce((acc, produto) => {
+    // Calcular valores totais
+    const valorTotalMenor = resultado.reduce((acc: number, produto: any) => {
       if (!produto.cotacoes || produto.cotacoes.length === 0) return acc;
-      const menorPreco = Math.min(...produto.cotacoes.map(c => c.preco_total));
+      const menorPreco = Math.min(...produto.cotacoes.map((c: any) => c.preco_total));
       return acc + menorPreco;
     }, 0);
 
-    const valorTotalMaior = todosProdutos.reduce((acc, produto) => {
+    const valorTotalMaior = resultado.reduce((acc: number, produto: any) => {
       if (!produto.cotacoes || produto.cotacoes.length === 0) return acc;
-      const maiorPreco = Math.max(...produto.cotacoes.map(c => c.preco_total));
+      const maiorPreco = Math.max(...produto.cotacoes.map((c: any) => c.preco_total));
       return acc + maiorPreco;
     }, 0);
 
     const economia = valorTotalMaior - valorTotalMenor;
     const percentualEconomia = valorTotalMaior > 0 ? ((economia / valorTotalMaior) * 100) : 0;
 
-    const prazoMedio = todasCotacoes.reduce((acc, cotacao) => 
+    // Calcular prazos
+    const prazoMedio = todasCotacoes.reduce((acc: number, cotacao: any) => 
       acc + cotacao.prazo_entrega_dias, 0) / todasCotacoes.length;
 
-    const menorPrazo = Math.min(...todasCotacoes.map(c => c.prazo_entrega_dias));
+    const menorPrazo = Math.min(...todasCotacoes.map((c: any) => c.prazo_entrega_dias));
 
-    // Calculate quality metrics from AI analysis
-    const qualidadeMedia = todasCotacoes.reduce((acc, cotacao) => {
-      // @ts-ignore - score_qualidade might not be in type yet
+    // Calcular métricas de qualidade da análise IA
+    const qualidadeMedia = todasCotacoes.reduce((acc: number, cotacao: any) => {
       return acc + (cotacao.score_qualidade || 7); // Default 7 if not available
     }, 0) / todasCotacoes.length;
 
-    const fornecedoresRecomendados = analiseAtual.melhor_custo_beneficio?.length || 0;
+    // Contar recomendações
+    const fornecedoresRecomendados = resultado.filter((p: any) => p.recomendacao?.fornecedor_recomendado).length;
     
-    // Count alerts from AI analysis
-    const alertasIdentificados = todasCotacoes.filter(c => c.dados_incompletos).length;
+    // Contar alertas da análise IA
+    const alertasIdentificados = todasCotacoes.filter((c: any) => c.dados_incompletos).length;
 
     return {
       totalProdutos,
@@ -109,6 +124,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ analises }) => {
       </div>
     );
   }
+
+  // Extrair dados do resultado da análise
+  const resultado = typeof analiseAtual.produtos === 'string' 
+    ? JSON.parse(analiseAtual.produtos) 
+    : analiseAtual.produtos;
+  
+  // Extrair resumo se disponível
+  const resumo = resultado.resumo || {};
+  
+  // Extrair recomendações
+  const recomendacoes = resumo.melhor_custo_beneficio || [];
+  
+  // Extrair alertas
+  const alertas = resumo.alertas || [];
 
   return (
     <div className="space-y-6">
@@ -213,10 +242,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ analises }) => {
             <h3 className="text-lg font-semibold text-gray-900">Recomendações da IA</h3>
           </div>
           
-          {analiseAtual.melhor_custo_beneficio && analiseAtual.melhor_custo_beneficio.length > 0 ? (
+          {recomendacoes && recomendacoes.length > 0 ? (
             <div className="space-y-3">
-              {analiseAtual.melhor_custo_beneficio.map((recomendacao, index) => {
-                const produto = analiseAtual.produtos.find(p => p.id === recomendacao.produto_id);
+              {recomendacoes.map((recomendacao: any, index: number) => {
+                const produto = resultado.find((p: any) => p.id === recomendacao.produto_id);
                 return (
                   <div key={index} className="flex items-start space-x-3 p-4 bg-purple-50 rounded-lg">
                     <div className="p-2 bg-purple-100 rounded-full">
@@ -224,7 +253,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ analises }) => {
                     </div>
                     <div className="flex-1">
                       <p className="font-medium text-gray-900">
-                        {produto?.descricao}
+                        {produto?.descricao || recomendacao.produto_id}
                       </p>
                       <p className="text-sm text-gray-600">
                         Recomendado: <span className="font-medium">{recomendacao.fornecedor}</span>
@@ -232,10 +261,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ analises }) => {
                       <p className="text-sm text-gray-600">
                         {recomendacao.motivo}
                       </p>
-                      {/* @ts-ignore - economia might not be in type yet */}
                       {recomendacao.economia && (
                         <p className="text-sm text-green-600 font-medium">
-                          {/* @ts-ignore */}
                           Economia: {formatarMoeda(recomendacao.economia)}
                         </p>
                       )}
@@ -260,43 +287,56 @@ export const Dashboard: React.FC<DashboardProps> = ({ analises }) => {
           </div>
           
           <div className="space-y-3">
-            {estatisticas.alertasIdentificados > 0 && (
-              <div className="flex items-start space-x-3 p-4 bg-yellow-50 rounded-lg">
-                <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5" />
-                <div>
-                  <p className="font-medium text-yellow-900">Dados Incompletos</p>
-                  <p className="text-sm text-yellow-800">
-                    {estatisticas.alertasIdentificados} cotação(ões) com informações faltantes
-                  </p>
+            {alertas && alertas.length > 0 ? (
+              alertas.map((alerta: string, index: number) => (
+                <div key={index} className="flex items-start space-x-3 p-4 bg-yellow-50 rounded-lg">
+                  <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5" />
+                  <div>
+                    <p className="text-sm text-yellow-800">{alerta}</p>
+                  </div>
                 </div>
-              </div>
+              ))
+            ) : (
+              <>
+                {estatisticas.alertasIdentificados > 0 && (
+                  <div className="flex items-start space-x-3 p-4 bg-yellow-50 rounded-lg">
+                    <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-yellow-900">Dados Incompletos</p>
+                      <p className="text-sm text-yellow-800">
+                        {estatisticas.alertasIdentificados} cotação(ões) com informações faltantes
+                      </p>
+                    </div>
+                  </div>
+                )}
+                
+                {estatisticas.prazoMedio > 15 && (
+                  <div className="flex items-start space-x-3 p-4 bg-orange-50 rounded-lg">
+                    <Clock className="w-5 h-5 text-orange-600 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-orange-900">Prazo Elevado</p>
+                      <p className="text-sm text-orange-800">
+                        Prazo médio de {estatisticas.prazoMedio} dias pode impactar cronograma
+                      </p>
+                    </div>
+                  </div>
+                )}
+                
+                {estatisticas.qualidadeMedia < 6 && (
+                  <div className="flex items-start space-x-3 p-4 bg-red-50 rounded-lg">
+                    <Target className="w-5 h-5 text-red-600 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-red-900">Qualidade Baixa</p>
+                      <p className="text-sm text-red-800">
+                        Score médio de qualidade abaixo do recomendado
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
             
-            {estatisticas.prazoMedio > 15 && (
-              <div className="flex items-start space-x-3 p-4 bg-orange-50 rounded-lg">
-                <Clock className="w-5 h-5 text-orange-600 mt-0.5" />
-                <div>
-                  <p className="font-medium text-orange-900">Prazo Elevado</p>
-                  <p className="text-sm text-orange-800">
-                    Prazo médio de {estatisticas.prazoMedio} dias pode impactar cronograma
-                  </p>
-                </div>
-              </div>
-            )}
-            
-            {estatisticas.qualidadeMedia < 6 && (
-              <div className="flex items-start space-x-3 p-4 bg-red-50 rounded-lg">
-                <Target className="w-5 h-5 text-red-600 mt-0.5" />
-                <div>
-                  <p className="font-medium text-red-900">Qualidade Baixa</p>
-                  <p className="text-sm text-red-800">
-                    Score médio de qualidade abaixo do recomendado
-                  </p>
-                </div>
-              </div>
-            )}
-            
-            {estatisticas.alertasIdentificados === 0 && estatisticas.prazoMedio <= 15 && estatisticas.qualidadeMedia >= 6 && (
+            {alertas && alertas.length === 0 && estatisticas.alertasIdentificados === 0 && estatisticas.prazoMedio <= 15 && estatisticas.qualidadeMedia >= 6 && (
               <div className="text-center py-8">
                 <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <TrendingUp className="w-6 h-6 text-green-600" />
@@ -315,26 +355,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ analises }) => {
           Resumo por Fornecedor (Análise IA)
         </h3>
         <div className="space-y-4">
-          {Array.from(new Set(analiseAtual.produtos.flatMap(p => 
-            (p.cotacoes || []).map(c => c.fornecedor)
+          {Array.from(new Set(resultado.flatMap((p: any) => 
+            (p.cotacoes || []).map((c: any) => c.fornecedor)
           ))).map(fornecedor => {
-            const cotacoesFornecedor = analiseAtual.produtos.flatMap(p => 
-              (p.cotacoes || []).filter(c => c.fornecedor === fornecedor)
+            const cotacoesFornecedor = resultado.flatMap((p: any) => 
+              (p.cotacoes || []).filter((c: any) => c.fornecedor === fornecedor)
             );
             
-            const valorTotal = cotacoesFornecedor.reduce((acc, c) => acc + c.preco_total, 0);
+            const valorTotal = cotacoesFornecedor.reduce((acc: number, c: any) => acc + c.preco_total, 0);
             const prazoMedio = cotacoesFornecedor.length > 0 
-              ? cotacoesFornecedor.reduce((acc, c) => acc + c.prazo_entrega_dias, 0) / cotacoesFornecedor.length
+              ? cotacoesFornecedor.reduce((acc: number, c: any) => acc + c.prazo_entrega_dias, 0) / cotacoesFornecedor.length
               : 0;
             const produtosCotados = cotacoesFornecedor.length;
             
             // AI quality metrics
-            const qualidadeMedia = cotacoesFornecedor.reduce((acc, c) => {
-              // @ts-ignore
+            const qualidadeMedia = cotacoesFornecedor.reduce((acc: number, c: any) => {
               return acc + (c.score_qualidade || 7);
             }, 0) / cotacoesFornecedor.length;
             
-            const isRecommended = analiseAtual.melhor_custo_beneficio?.some(r => r.fornecedor === fornecedor);
+            const isRecommended = recomendacoes?.some((r: any) => r.fornecedor === fornecedor);
 
             return (
               <div key={fornecedor} className={`flex items-center justify-between p-4 border rounded-lg ${
@@ -357,7 +396,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ analises }) => {
                       Qualidade IA: <span className="font-medium">{qualidadeMedia.toFixed(1)}/10</span>
                     </p>
                     <p className="text-sm text-gray-600">
-                      Dados completos: {cotacoesFornecedor.filter(c => !c.dados_incompletos).length}/{produtosCotados}
+                      Dados completos: {cotacoesFornecedor.filter((c: any) => !c.dados_incompletos).length}/{produtosCotados}
                     </p>
                   </div>
                 </div>
