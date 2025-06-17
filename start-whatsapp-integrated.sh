@@ -5,17 +5,22 @@ echo "   WHATSAPP INTEGRADO - INICIANDO"
 echo "========================================"
 echo
 
-echo "1. Instalando dependências..."
+# Parar processos anteriores
+echo "1. Parando processos anteriores..."
+sudo pkill -f node
+sleep 2
+
+echo "2. Instalando dependências..."
 npm install
 echo
 
-echo "2. Iniciando servidor WhatsApp Integrado..."
+echo "3. Iniciando servidor WhatsApp Integrado..."
 nohup npm run whatsapp-integrated > whatsapp-integrated.log 2>&1 &
 INTEGRATED_PID=$!
 echo "Servidor Integrado iniciado (PID: $INTEGRATED_PID)"
 sleep 3
 
-echo "3. Iniciando interface frontend..."
+echo "4. Iniciando interface frontend..."
 nohup npm run dev > frontend.log 2>&1 &
 FRONTEND_PID=$!
 echo "Frontend iniciado (PID: $FRONTEND_PID)"
