@@ -4,7 +4,7 @@ import { SmartUploadArea } from './components/SmartUploadArea';
 import { ComparacaoTable } from './components/ComparacaoTable';
 import { Dashboard } from './components/Dashboard';
 import { ConfigurationPanel } from './components/ConfigurationPanel';
-import { WhatsAppSaaSClient } from './components/WhatsAppSaaSClient';
+import { WhatsAppIntegrated } from './components/WhatsAppIntegrated';
 import { DocumentoUpload, AnaliseCompleta, FiltrosComparacao } from './types';
 import { databaseService } from './services/database';
 import { Toaster } from 'react-hot-toast';
@@ -20,28 +20,21 @@ function App() {
     fornecedores_selecionados: []
   });
 
-  // Verificar se é um cliente SaaS (tem tenant na URL)
-  const urlParams = new URLSearchParams(window.location.search);
-  const tenantId = urlParams.get('tenant');
-  const isSaaSClient = !!tenantId;
-
   // Carregar análises salvas
   useEffect(() => {
-    if (!isSaaSClient) {
-      const analisesCarregadas = databaseService.getAnalyses();
-      if (analisesCarregadas.length > 0) {
-        const analisesConvertidas = analisesCarregadas.map(a => ({
-          id: a.id,
-          nome_analise: a.nome,
-          data_criacao: a.data_criacao,
-          produtos: parseAnalysisResult(a.resultado_analise),
-          total_fornecedores: calculateTotalSuppliers(parseAnalysisResult(a.resultado_analise)),
-          melhor_custo_beneficio: []
-        }));
-        setAnalises(analisesConvertidas);
-      }
+    const analisesCarregadas = databaseService.getAnalyses();
+    if (analisesCarregadas.length > 0) {
+      const analisesConvertidas = analisesCarregadas.map(a => ({
+        id: a.id,
+        nome_analise: a.nome,
+        data_criacao: a.data_criacao,
+        produtos: parseAnalysisResult(a.resultado_analise),
+        total_fornecedores: calculateTotalSuppliers(parseAnalysisResult(a.resultado_analise)),
+        melhor_custo_beneficio: []
+      }));
+      setAnalises(analisesConvertidas);
     }
-  }, [isSaaSClient]);
+  }, []);
 
   const parseAnalysisResult = (result: any) => {
     try {
@@ -88,21 +81,11 @@ function App() {
 
   const analiseAtual = analises[analises.length - 1];
 
-  // Se é cliente SaaS, mostrar apenas WhatsApp
-  if (isSaaSClient) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Toaster position="top-right" />
-        <WhatsAppSaaSClient />
-      </div>
-    );
-  }
-
   const tabs = [
     { id: 'dashboard' as TabAtiva, label: 'Dashboard', icon: BarChart3 },
     { id: 'upload' as TabAtiva, label: 'Upload Inteligente', icon: UploadIcon },
     { id: 'comparacao' as TabAtiva, label: 'Comparação', icon: FileText },
-    { id: 'whatsapp' as TabAtiva, label: 'WhatsApp SaaS', icon: MessageSquare },
+    { id: 'whatsapp' as TabAtiva, label: 'WhatsApp', icon: MessageSquare },
     { id: 'configuracoes' as TabAtiva, label: 'Configurações', icon: Settings }
   ];
 
@@ -241,41 +224,14 @@ function App() {
           <div className="space-y-6">
             <div className="text-center">
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                WhatsApp SaaS - Painel Administrativo
+                WhatsApp Integrado
               </h2>
               <p className="text-gray-600 max-w-2xl mx-auto">
-                Gerencie instâncias WhatsApp para seus clientes. Cada cliente recebe um link único para conectar seu WhatsApp.
+                Conecte seu WhatsApp diretamente na plataforma. Cada usuário tem sua instância exclusiva e isolada.
               </p>
             </div>
             
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="text-center">
-                <MessageSquare className="w-16 h-16 text-green-600 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  Acesse o Painel SaaS
-                </h3>
-                <p className="text-gray-600 mb-4">
-                  Para gerenciar clientes e criar novas instâncias WhatsApp, acesse o painel administrativo.
-                </p>
-                <button
-                  onClick={() => window.open('http://146.59.227.248:3001', '_blank')}
-                  className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                >
-                  Abrir Painel SaaS
-                </button>
-              </div>
-            </div>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-              <h4 className="font-medium text-blue-900 mb-2">🚀 Como funciona o SaaS:</h4>
-              <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
-                <li>Acesse o painel administrativo em <code>http://146.59.227.248:3001</code></li>
-                <li>Clique em "Criar Novo Cliente" para gerar uma instância</li>
-                <li>Compartilhe o link gerado com seu cliente</li>
-                <li>Cliente acessa o link e escaneia o QR Code</li>
-                <li>WhatsApp conecta automaticamente na instância exclusiva!</li>
-              </ol>
-            </div>
+            <WhatsAppIntegrated />
           </div>
         )}
 

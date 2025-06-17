@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview --host 0.0.0.0",
     "whatsapp-server": "node server/whatsapp-real-server.js",
-    "whatsapp-saas": "node server/whatsapp-saas-server.js"
+    "whatsapp-saas": "node server/whatsapp-saas-server.js",
+    "whatsapp-integrated": "node server/whatsapp-integrated-server.js"
   },
   "dependencies": {
     "lucide-react": "^0.344.0",
