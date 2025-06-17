@@ -40,8 +40,12 @@ interface WhatsAppUser {
   number: string;
 }
 
-// Servidor integrado na porta 3005
-const SERVER_URL = 'http://146.59.227.248:3005';
+// Try multiple server configurations
+const SERVER_CONFIGS = [
+  'http://146.59.227.248:3005',  // Original port
+  'http://146.59.227.248:3001',  // Fallback to main SaaS port
+  'http://localhost:3005',       // Local development
+];
 
 export const WhatsAppIntegrated: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'connect' | 'dashboard' | 'messages'>('connect');
@@ -57,6 +61,8 @@ export const WhatsAppIntegrated: React.FC = () => {
   const [userId, setUserId] = useState<string>('');
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(false);
+  const [currentServerUrl, setCurrentServerUrl] = useState<string>('');
+  const [connectionAttempts, setConnectionAttempts] = useState(0);
 
   // Gerar ID único para o usuário (em produção viria do login)
   useEffect(() => {
@@ -68,15 +74,70 @@ export const WhatsAppIntegrated: React.FC = () => {
     setUserId(storedUserId);
   }, []);
 
-  // Conectar ao servidor Socket.IO quando tiver userId
-  useEffect(() => {
+  // Function to try connecting to different server configurations
+  const tryConnectToServer = async (serverUrl: string): Promise<boolean> => {
+    return new Promise((resolve) => {
+      console.log(`🔌 Tentando conectar em: ${serverUrl}`);
+      
+      const testSocket = io(serverUrl, {
+        timeout: 5000,
+        forceNew: true,
+        transports: ['websocket', 'polling']
+      });
+
+      const timeout = setTimeout(() => {
+        testSocket.disconnect();
+        resolve(false);
+      }, 5000);
+
+      testSocket.on('connect', () => {
+        console.log(`✅ Conectado com sucesso em: ${serverUrl}`);
+        clearTimeout(timeout);
+        testSocket.disconnect();
+        resolve(true);
+      });
+
+      testSocket.on('connect_error', () => {
+        clearTimeout(timeout);
+        testSocket.disconnect();
+        resolve(false);
+      });
+    });
+  };
+
+  // Find working server and connect
+  const connectToWorkingServer = async () => {
     if (!userId) return;
 
-    console.log('🔌 Conectando ao servidor WhatsApp Integrado...', SERVER_URL);
+    console.log('🔍 Procurando servidor WhatsApp disponível...');
     setServerStatus('connecting');
     setConnectionError(null);
+    setConnectionAttempts(prev => prev + 1);
 
-    const newSocket = io(SERVER_URL, {
+    // Try each server configuration
+    for (const serverUrl of SERVER_CONFIGS) {
+      const isWorking = await tryConnectToServer(serverUrl);
+      
+      if (isWorking) {
+        console.log(`🎯 Servidor encontrado: ${serverUrl}`);
+        setCurrentServerUrl(serverUrl);
+        connectToServer(serverUrl);
+        return;
+      }
+    }
+
+    // If no server is working
+    console.error('❌ Nenhum servidor WhatsApp disponível');
+    setServerStatus('offline');
+    setConnectionError('Nenhum servidor WhatsApp disponível. Verifique se o servidor está rodando nas portas 3005 ou 3001.');
+    toast.error('Erro: Servidor WhatsApp não encontrado');
+  };
+
+  // Connect to specific server
+  const connectToServer = (serverUrl: string) => {
+    console.log('🔌 Conectando ao servidor WhatsApp:', serverUrl);
+
+    const newSocket = io(serverUrl, {
       timeout: 10000,
       forceNew: true,
       transports: ['websocket', 'polling']
@@ -85,20 +146,26 @@ export const WhatsAppIntegrated: React.FC = () => {
     setSocket(newSocket);
 
     newSocket.on('connect', () => {
-      console.log('✅ Conectado ao servidor WhatsApp Integrado!');
+      console.log('✅ Conectado ao servidor WhatsApp!');
       setServerStatus('online');
       setConnectionError(null);
       
       // Entrar no room do usuário
       newSocket.emit('join-user', userId);
-      toast.success('Conectado ao servidor WhatsApp!');
+      toast.success(`Conectado ao servidor WhatsApp! (${serverUrl})`);
     });
 
     newSocket.on('connect_error', (error) => {
       console.error('❌ Erro de conexão:', error);
       setServerStatus('offline');
-      setConnectionError(`Erro de conexão: ${error.message}`);
-      toast.error('Erro ao conectar no servidor');
+      setConnectionError(`Erro de conexão com ${serverUrl}: ${error.message}`);
+      
+      // Try to reconnect to another server after a delay
+      setTimeout(() => {
+        if (connectionAttempts < 3) {
+          connectToWorkingServer();
+        }
+      }, 3000);
     });
 
     newSocket.on('disconnect', () => {
@@ -166,18 +233,30 @@ export const WhatsAppIntegrated: React.FC = () => {
         setUser(status.user);
       }
     });
+  };
+
+  // Connect when userId is available
+  useEffect(() => {
+    if (!userId) return;
+
+    connectToWorkingServer();
 
     return () => {
-      newSocket.disconnect();
+      if (socket) {
+        socket.disconnect();
+      }
     };
   }, [userId]);
 
   const initializeWhatsApp = async () => {
-    if (!userId) return;
+    if (!userId || !currentServerUrl) {
+      toast.error('Servidor não conectado');
+      return;
+    }
     
     setInitializing(true);
     try {
-      const response = await fetch(`${SERVER_URL}/api/user/whatsapp/init`, {
+      const response = await fetch(`${currentServerUrl}/api/user/whatsapp/init`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -207,10 +286,10 @@ export const WhatsAppIntegrated: React.FC = () => {
   };
 
   const fetchQRCode = async () => {
-    if (!userId) return;
+    if (!userId || !currentServerUrl) return;
     
     try {
-      const response = await fetch(`${SERVER_URL}/api/user/${userId}/whatsapp/qr`);
+      const response = await fetch(`${currentServerUrl}/api/user/${userId}/whatsapp/qr`);
       
       if (response.ok) {
         const data = await response.json();
@@ -225,10 +304,10 @@ export const WhatsAppIntegrated: React.FC = () => {
   };
 
   const loadChats = async () => {
-    if (!userId) return;
+    if (!userId || !currentServerUrl) return;
     
     try {
-      const response = await fetch(`${SERVER_URL}/api/user/${userId}/whatsapp/chats`);
+      const response = await fetch(`${currentServerUrl}/api/user/${userId}/whatsapp/chats`);
       if (response.ok) {
         const data = await response.json();
         setChats(data);
@@ -239,10 +318,10 @@ export const WhatsAppIntegrated: React.FC = () => {
   };
 
   const sendMessage = async () => {
-    if (!selectedChat || !messageText.trim() || !isConnected || !userId) return;
+    if (!selectedChat || !messageText.trim() || !isConnected || !userId || !currentServerUrl) return;
 
     try {
-      const response = await fetch(`${SERVER_URL}/api/user/${userId}/whatsapp/send`, {
+      const response = await fetch(`${currentServerUrl}/api/user/${userId}/whatsapp/send`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -266,10 +345,10 @@ export const WhatsAppIntegrated: React.FC = () => {
   };
 
   const restartWhatsApp = async () => {
-    if (!userId) return;
+    if (!userId || !currentServerUrl) return;
     
     try {
-      const response = await fetch(`${SERVER_URL}/api/user/${userId}/whatsapp/restart`, {
+      const response = await fetch(`${currentServerUrl}/api/user/${userId}/whatsapp/restart`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -292,6 +371,11 @@ export const WhatsAppIntegrated: React.FC = () => {
     } catch (error) {
       toast.error('Erro ao reiniciar WhatsApp');
     }
+  };
+
+  const retryConnection = () => {
+    setConnectionAttempts(0);
+    connectToWorkingServer();
   };
 
   const formatTime = (timestamp: number) => {
@@ -337,6 +421,12 @@ export const WhatsAppIntegrated: React.FC = () => {
               <div className="flex items-center space-x-2 mt-1">
                 <span className="text-xs text-gray-500">ID:</span>
                 <code className="text-xs bg-gray-100 px-2 py-1 rounded">{userId}</code>
+                {currentServerUrl && (
+                  <>
+                    <span className="text-xs text-gray-500">Servidor:</span>
+                    <code className="text-xs bg-blue-100 px-2 py-1 rounded">{currentServerUrl}</code>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -361,11 +451,27 @@ export const WhatsAppIntegrated: React.FC = () => {
       {/* Connection Error */}
       {connectionError && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex items-center space-x-2">
-            <AlertTriangle className="w-5 h-5 text-red-600" />
-            <p className="text-red-800 font-medium">Erro de Conexão</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <AlertTriangle className="w-5 h-5 text-red-600" />
+              <p className="text-red-800 font-medium">Erro de Conexão</p>
+            </div>
+            <button
+              onClick={retryConnection}
+              className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+            >
+              Tentar Novamente
+            </button>
           </div>
           <p className="text-red-700 text-sm mt-1">{connectionError}</p>
+          <div className="mt-2 text-xs text-red-600">
+            <p>Servidores testados:</p>
+            <ul className="list-disc list-inside ml-2">
+              {SERVER_CONFIGS.map(url => (
+                <li key={url}>{url}</li>
+              ))}
+            </ul>
+          </div>
         </div>
       )}
 
@@ -376,7 +482,7 @@ export const WhatsAppIntegrated: React.FC = () => {
             <CheckCircle className="w-5 h-5 text-green-600" />
             <p className="text-green-800 font-medium">✅ Sistema WhatsApp Integrado funcionando!</p>
           </div>
-          <p className="text-green-700 text-sm mt-1">Servidor na porta 3005 - Sem conflitos com outros projetos!</p>
+          <p className="text-green-700 text-sm mt-1">Conectado em: {currentServerUrl}</p>
         </div>
       )}
 
