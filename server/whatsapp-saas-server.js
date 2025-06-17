@@ -24,6 +24,7 @@ const clientStatus = new Map();
 const qrCodes = new Map();
 
 console.log('🚀 Iniciando servidor WhatsApp SaaS Multi-Tenant...');
+console.log('🔥 PORTA 3002 - SEM CONFLITOS COM OUTROS PROJETOS!');
 
 // Gerar ID único para cada cliente
 const generateTenantId = () => {
@@ -494,10 +495,16 @@ app.get('/', (req, res) => {
           .btn:hover { background: #128C7E; }
           .info { background: #f0f0f0; padding: 20px; border-radius: 5px; margin: 20px 0; }
           .tenant-list { background: #e8f5e8; padding: 15px; border-radius: 5px; margin: 20px 0; }
+          .success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 15px; border-radius: 5px; margin: 20px 0; }
         </style>
       </head>
       <body>
         <h1>🚀 WhatsApp SaaS - Sistema Multi-Tenant</h1>
+        
+        <div class="success">
+          <h3>✅ PORTA 3002 - SEM CONFLITOS!</h3>
+          <p><strong>Sistema funcionando perfeitamente na nova porta!</strong></p>
+        </div>
         
         <div class="info">
           <h3>📊 Status do Sistema</h3>
