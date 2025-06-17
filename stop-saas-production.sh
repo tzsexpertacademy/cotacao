@@ -15,6 +15,16 @@ else
     echo "❌ PID do servidor SaaS não encontrado"
 fi
 
+if [ -f "integrated-server.pid" ]; then
+    INTEGRATED_PID=$(cat integrated-server.pid)
+    echo "Parando servidor Integrated (PID: $INTEGRATED_PID)..."
+    kill $INTEGRATED_PID 2>/dev/null
+    rm integrated-server.pid
+    echo "✅ Servidor Integrated parado"
+else
+    echo "❌ PID do servidor Integrated não encontrado"
+fi
+
 if [ -f "frontend.pid" ]; then
     FRONTEND_PID=$(cat frontend.pid)
     echo "Parando frontend (PID: $FRONTEND_PID)..."
