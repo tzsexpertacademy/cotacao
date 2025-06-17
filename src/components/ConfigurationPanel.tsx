@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Key, MessageSquare, Database, Bot, Save, TestTube, CheckCircle, AlertTriangle, Brain } from 'lucide-react';
+import { Settings, Key, MessageSquare, Database, Bot, Save, TestTube, CheckCircle, AlertTriangle, Brain, Trash2 } from 'lucide-react';
 import { openAIService } from '../services/openai';
 import { whatsAppService } from '../services/whatsapp';
 import { databaseService } from '../services/database';
@@ -92,6 +92,24 @@ export const ConfigurationPanel: React.FC = () => {
       toast.error('Erro no teste: ' + (error as Error).message);
     } finally {
       setTesting(false);
+    }
+  };
+
+  const clearAllData = () => {
+    if (confirm('⚠️ Tem certeza que deseja limpar todos os dados? Esta ação não pode ser desfeita.')) {
+      // Limpar localStorage
+      localStorage.removeItem('analyses');
+      localStorage.removeItem('whatsapp_messages');
+      localStorage.removeItem('whatsapp_chats');
+      localStorage.removeItem('whatsapp_cotacoes');
+      localStorage.removeItem('listas_compras');
+      
+      // Manter configurações
+      // localStorage.removeItem('openai_api_key');
+      // localStorage.removeItem('openai_assistant_id');
+      // localStorage.removeItem('ai_assistant_config');
+      
+      toast.success('Todos os dados foram limpos!');
     }
   };
 
@@ -197,23 +215,33 @@ export const ConfigurationPanel: React.FC = () => {
                 />
               </div>
 
-              <button
-                onClick={handleSaveOpenAI}
-                disabled={creating || !openAIKey.trim()}
-                className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {creating ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Configurando...</span>
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4" />
-                    <span>Salvar e Criar Assistente</span>
-                  </>
-                )}
-              </button>
+              <div className="flex space-x-4">
+                <button
+                  onClick={handleSaveOpenAI}
+                  disabled={creating || !openAIKey.trim()}
+                  className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {creating ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Configurando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      <span>Salvar e Criar Assistente</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={clearAllData}
+                  className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Limpar Todos os Dados</span>
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -315,6 +343,14 @@ export const ConfigurationPanel: React.FC = () => {
                 )}
                 <span>{testing ? 'Testando...' : 'Testar Integração'}</span>
               </button>
+
+              <button
+                onClick={clearAllData}
+                className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors ml-auto"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Limpar Todos os Dados</span>
+              </button>
             </div>
           </div>
         )}
@@ -322,9 +358,19 @@ export const ConfigurationPanel: React.FC = () => {
         {/* Status das Integrações */}
         {activeTab === 'status' && (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Status das Integrações
-            </h3>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Status das Integrações
+              </h3>
+              
+              <button
+                onClick={clearAllData}
+                className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Limpar Todos os Dados</span>
+              </button>
+            </div>
             
             <div className="space-y-3">
               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
@@ -391,6 +437,21 @@ export const ConfigurationPanel: React.FC = () => {
                 <p>✅ WhatsApp: Integração ativa para recebimento de cotações</p>
                 <p>✅ Configuração IA: Sistema de personalização do assistente</p>
               </div>
+            </div>
+
+            {/* Data Management */}
+            <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <h4 className="font-medium text-red-900 mb-2">Gerenciamento de Dados</h4>
+              <p className="text-sm text-red-800 mb-4">
+                Você pode limpar todos os dados do sistema para começar do zero. Esta ação não pode ser desfeita.
+              </p>
+              <button
+                onClick={clearAllData}
+                className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Limpar Todos os Dados</span>
+              </button>
             </div>
           </div>
         )}
