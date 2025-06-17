@@ -245,7 +245,7 @@ app.post('/api/saas/create-tenant', (req, res) => {
   try {
     createWhatsAppInstance(tenantId);
     
-    // 🔥 SEMPRE usar IP público com porta 5173
+    // 🔥 CORREÇÃO: SEMPRE usar IP público com porta 5173
     const accessUrl = `http://146.59.227.248:5173?tenant=${tenantId}`;
     
     res.json({
@@ -504,7 +504,7 @@ app.get('/', (req, res) => {
           <p><strong>Clientes ativos:</strong> ${clientInstances.size}</p>
           <p><strong>Servidor:</strong> Online ✅</p>
           <p><strong>IP:</strong> 146.59.227.248</p>
-          <p><strong>Porta:</strong> 3002</p>
+          <p><strong>Porta:</strong> 3001</p>
         </div>
 
         <div class="tenant-list">
@@ -581,8 +581,8 @@ io.on('connection', (socket) => {
   });
 });
 
-// 🔥 USAR PORTA DIFERENTE PARA EVITAR CONFLITO
-const PORT = process.env.PORT || 3002;
+// Inicializar servidor
+const PORT = process.env.PORT || 3001;
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor WhatsApp SaaS rodando na porta ${PORT}`);
