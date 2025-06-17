@@ -48,25 +48,8 @@ interface WhatsAppUser {
   number: string;
 }
 
-// 🔥 CORREÇÃO CRÍTICA: Detectar automaticamente o host correto
-const getServerUrl = () => {
-  const currentHost = window.location.hostname;
-  
-  // Se está acessando via IP público, usar IP público
-  if (currentHost === '146.59.227.248') {
-    return 'http://146.59.227.248:3001';
-  }
-  
-  // Se está acessando via localhost, usar localhost
-  if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
-    return 'http://localhost:3001';
-  }
-  
-  // Fallback para IP público
-  return 'http://146.59.227.248:3001';
-};
-
-const SERVER_URL = getServerUrl();
+// 🔥 SEMPRE usar IP público para o servidor
+const SERVER_URL = 'http://146.59.227.248:3001';
 
 export const WhatsAppSaaSClient: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'qr' | 'dashboard' | 'messages' | 'contacts' | 'settings'>('qr');
@@ -81,6 +64,7 @@ export const WhatsAppSaaSClient: React.FC = () => {
   const [serverStatus, setServerStatus] = useState<'offline' | 'connecting' | 'online'>('offline');
   const [user, setUser] = useState<WhatsAppUser | null>(null);
   const [tenantId, setTenantId] = useState<string | null>(null);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const [stats, setStats] = useState({
     totalMessages: 0,
     totalChats: 0,
@@ -108,17 +92,35 @@ export const WhatsAppSaaSClient: React.FC = () => {
     if (!tenantId) return;
 
     console.log('🔌 Conectando ao servidor WhatsApp SaaS...', SERVER_URL);
-    const newSocket = io(SERVER_URL);
-    setSocket(newSocket);
     setServerStatus('connecting');
+    setConnectionError(null);
+
+    const newSocket = io(SERVER_URL, {
+      timeout: 10000,
+      forceNew: true,
+      transports: ['websocket', 'polling']
+    });
+    
+    setSocket(newSocket);
 
     newSocket.on('connect', () => {
       console.log('✅ Conectado ao servidor WhatsApp SaaS!', SERVER_URL);
       setServerStatus('online');
+      setConnectionError(null);
       
       // Entrar no room do tenant
       newSocket.emit('join-tenant', tenantId);
       toast.success('Conectado ao servidor WhatsApp!');
+      
+      // Buscar QR Code imediatamente
+      fetchQRCode();
+    });
+
+    newSocket.on('connect_error', (error) => {
+      console.error('❌ Erro de conexão:', error);
+      setServerStatus('offline');
+      setConnectionError(`Erro de conexão: ${error.message}`);
+      toast.error('Erro ao conectar no servidor');
     });
 
     newSocket.on('disconnect', () => {
@@ -189,6 +191,7 @@ export const WhatsAppSaaSClient: React.FC = () => {
     });
 
     newSocket.on('status', (status: any) => {
+      console.log('📊 Status recebido:', status);
       setIsConnected(status.isReady);
       if (status.hasQR && !status.isReady) {
         fetchQRCode();
@@ -206,14 +209,21 @@ export const WhatsAppSaaSClient: React.FC = () => {
   const fetchQRCode = async () => {
     if (!tenantId) return;
     
+    console.log('🔍 Buscando QR Code para tenant:', tenantId);
+    
     try {
       const response = await fetch(`${SERVER_URL}/api/whatsapp/${tenantId}/qr`);
+      console.log('📡 Resposta QR Code:', response.status);
+      
       if (response.ok) {
         const data = await response.json();
+        console.log('✅ QR Code recebido via API');
         setQrCode(data.qr);
+      } else {
+        console.log('⏳ QR Code ainda não disponível');
       }
     } catch (error) {
-      console.error('Erro ao buscar QR Code:', error);
+      console.error('❌ Erro ao buscar QR Code:', error);
     }
   };
 
@@ -307,6 +317,11 @@ export const WhatsAppSaaSClient: React.FC = () => {
         setContacts([]);
         setUser(null);
         toast.success('WhatsApp reiniciado!');
+        
+        // Buscar novo QR Code após reiniciar
+        setTimeout(() => {
+          fetchQRCode();
+        }, 3000);
       }
     } catch (error) {
       toast.error('Erro ao reiniciar WhatsApp');
@@ -417,6 +432,23 @@ export const WhatsAppSaaSClient: React.FC = () => {
         </div>
       </div>
 
+      {/* Connection Error */}
+      {connectionError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-center space-x-2">
+            <AlertTriangle className="w-5 h-5 text-red-600" />
+            <p className="text-red-800 font-medium">Erro de Conexão</p>
+          </div>
+          <p className="text-red-700 text-sm mt-1">{connectionError}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-2 px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+          >
+            Tentar Novamente
+          </button>
+        </div>
+      )}
+
       {/* Navigation */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="flex space-x-1 p-1">
@@ -449,6 +481,25 @@ export const WhatsAppSaaSClient: React.FC = () => {
               <h3 className="text-lg font-semibold text-gray-900 mb-6">
                 Conectar seu WhatsApp
               </h3>
+              
+              {/* Debug Info */}
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg text-left">
+                <h4 className="font-medium text-gray-900 mb-2">🔍 Debug Info:</h4>
+                <div className="text-sm text-gray-600 space-y-1">
+                  <p><strong>Tenant ID:</strong> {tenantId}</p>
+                  <p><strong>Server Status:</strong> {serverStatus}</p>
+                  <p><strong>Server URL:</strong> {SERVER_URL}</p>
+                  <p><strong>WhatsApp Connected:</strong> {isConnected ? 'Sim' : 'Não'}</p>
+                  <p><strong>QR Code Available:</strong> {qrCode ? 'Sim' : 'Não'}</p>
+                  <p><strong>Connection Error:</strong> {connectionError || 'Nenhum'}</p>
+                </div>
+                <button
+                  onClick={fetchQRCode}
+                  className="mt-2 px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                >
+                  🔄 Buscar QR Code
+                </button>
+              </div>
               
               {qrCode ? (
                 <div className="space-y-6">
@@ -501,7 +552,11 @@ export const WhatsAppSaaSClient: React.FC = () => {
                   </div>
                   <div>
                     <h4 className="text-lg font-medium text-gray-900">Preparando WhatsApp</h4>
-                    <p className="text-gray-600">Iniciando sua instância exclusiva... O QR Code aparecerá em breve.</p>
+                    <p className="text-gray-600">
+                      {serverStatus === 'connecting' ? 'Conectando ao servidor...' : 
+                       serverStatus === 'offline' ? 'Servidor offline' :
+                       'Iniciando sua instância exclusiva... O QR Code aparecerá em breve.'}
+                    </p>
                   </div>
                   {serverStatus === 'offline' && (
                     <div className="bg-red-50 border border-red-200 rounded-lg p-4">
