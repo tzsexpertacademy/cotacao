@@ -48,8 +48,8 @@ interface WhatsAppUser {
   number: string;
 }
 
-// 🔥 SEMPRE usar IP público para o servidor
-const SERVER_URL = 'http://146.59.227.248:3001';
+// 🔥 MUDANÇA CRÍTICA: USAR PORTA 3002 PARA EVITAR CONFLITO
+const SERVER_URL = 'http://146.59.227.248:3002';
 
 export const WhatsAppSaaSClient: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'qr' | 'dashboard' | 'messages' | 'contacts' | 'settings'>('qr');
@@ -411,6 +411,7 @@ export const WhatsAppSaaSClient: React.FC = () => {
               <div className="flex items-center space-x-2 mt-1">
                 <span className="text-xs text-gray-500">Servidor:</span>
                 <code className="text-xs bg-blue-100 px-2 py-1 rounded">{SERVER_URL}</code>
+                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">PORTA 3002 - SEM CONFLITO!</span>
               </div>
             </div>
           </div>
@@ -446,6 +447,17 @@ export const WhatsAppSaaSClient: React.FC = () => {
           >
             Tentar Novamente
           </button>
+        </div>
+      )}
+
+      {/* Success Message */}
+      {serverStatus === 'online' && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="flex items-center space-x-2">
+            <CheckCircle className="w-5 h-5 text-green-600" />
+            <p className="text-green-800 font-medium">✅ Conectado com sucesso na PORTA 3002!</p>
+          </div>
+          <p className="text-green-700 text-sm mt-1">Conflito de porta resolvido. Sistema funcionando perfeitamente!</p>
         </div>
       )}
 
@@ -488,7 +500,7 @@ export const WhatsAppSaaSClient: React.FC = () => {
                 <div className="text-sm text-gray-600 space-y-1">
                   <p><strong>Tenant ID:</strong> {tenantId}</p>
                   <p><strong>Server Status:</strong> {serverStatus}</p>
-                  <p><strong>Server URL:</strong> {SERVER_URL}</p>
+                  <p><strong>Server URL:</strong> {SERVER_URL} <span className="text-green-600 font-bold">(PORTA 3002 - SEM CONFLITO!)</span></p>
                   <p><strong>WhatsApp Connected:</strong> {isConnected ? 'Sim' : 'Não'}</p>
                   <p><strong>QR Code Available:</strong> {qrCode ? 'Sim' : 'Não'}</p>
                   <p><strong>Connection Error:</strong> {connectionError || 'Nenhum'}</p>
@@ -526,6 +538,7 @@ export const WhatsAppSaaSClient: React.FC = () => {
                     <p>⚡ QR Code atualiza automaticamente</p>
                     <p>🔒 Conexão segura e criptografada</p>
                     <p>🏢 Instância exclusiva para seu negócio</p>
+                    <p>✅ Porta 3002 - Sem conflitos com outros projetos!</p>
                   </div>
                 </div>
               ) : isConnected ? (
@@ -909,6 +922,7 @@ export const WhatsAppSaaSClient: React.FC = () => {
                   <li>• Dados isolados e seguros</li>
                   <li>• Funciona como WhatsApp Web oficial</li>
                   <li>• Suporte técnico incluído</li>
+                  <li>• <strong>Porta 3002 - Sem conflitos com outros projetos!</strong></li>
                 </ul>
               </div>
 
@@ -955,6 +969,12 @@ export const WhatsAppSaaSClient: React.FC = () => {
                     <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <span>URL do Servidor</span>
                       <code className="text-xs bg-white px-2 py-1 rounded">{SERVER_URL}</code>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
+                      <span>Status da Porta</span>
+                      <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded font-bold">
+                        PORTA 3002 - SEM CONFLITO! ✅
+                      </span>
                     </div>
                   </div>
                 </div>

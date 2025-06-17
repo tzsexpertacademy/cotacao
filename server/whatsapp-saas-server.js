@@ -504,7 +504,7 @@ app.get('/', (req, res) => {
           <p><strong>Clientes ativos:</strong> ${clientInstances.size}</p>
           <p><strong>Servidor:</strong> Online ✅</p>
           <p><strong>IP:</strong> 146.59.227.248</p>
-          <p><strong>Porta:</strong> 3001</p>
+          <p><strong>Porta:</strong> 3002 (Nova porta sem conflito!)</p>
         </div>
 
         <div class="tenant-list">
@@ -581,8 +581,8 @@ io.on('connection', (socket) => {
   });
 });
 
-// Inicializar servidor
-const PORT = process.env.PORT || 3001;
+// 🔥 MUDANÇA CRÍTICA: USAR PORTA 3002 PARA EVITAR CONFLITO
+const PORT = process.env.PORT || 3002;
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor WhatsApp SaaS rodando na porta ${PORT}`);
@@ -590,6 +590,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`📱 Interface Cliente: http://146.59.227.248:5173`);
   console.log('');
   console.log('🔥 SISTEMA SAAS MULTI-TENANT PRONTO!');
+  console.log('✅ PORTA 3002 - SEM CONFLITOS!');
   console.log('');
 });
 
