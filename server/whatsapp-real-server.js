@@ -1,9 +1,9 @@
-import express from 'express';
-import cors from 'cors';
-import { Client, LocalAuth } from 'whatsapp-web.js';
-import qrcode from 'qrcode-terminal';
-import { Server } from 'socket.io';
-import http from 'http';
+const express = require('express');
+const cors = require('cors');
+const { Client, LocalAuth } = require('whatsapp-web.js');
+const qrcode = require('qrcode-terminal');
+const { Server } = require('socket.io');
+const http = require('http');
 
 const app = express();
 const server = http.createServer(app);

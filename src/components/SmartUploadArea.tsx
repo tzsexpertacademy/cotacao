@@ -77,8 +77,24 @@ export const SmartUploadArea: React.FC<SmartUploadAreaProps> = ({ onAnalysisComp
           d.id === doc.id ? { ...d, progresso: 50 } : d
         ));
 
-        // Analisar com OpenAI
-        const resultadoAnalise = await openAIService.analyzeDocument(conteudo, arquivo.name);
+        // Verificar se há configuração personalizada do assistente
+        const customConfig = localStorage.getItem('ai_assistant_config');
+        let resultadoAnalise;
+
+        if (customConfig) {
+          const config = JSON.parse(customConfig);
+          if (config.isActive) {
+            // Usar prompt personalizado
+            const compiledPrompt = compilePrompt(config);
+            resultadoAnalise = await openAIService.analyzeDocumentWithCustomPrompt(conteudo, arquivo.name, compiledPrompt);
+          } else {
+            // Usar análise padrão
+            resultadoAnalise = await openAIService.analyzeDocument(conteudo, arquivo.name);
+          }
+        } else {
+          // Usar análise padrão
+          resultadoAnalise = await openAIService.analyzeDocument(conteudo, arquivo.name);
+        }
         
         setDocumentos(prev => prev.map(d => 
           d.id === doc.id ? { ...d, progresso: 75 } : d
@@ -87,7 +103,7 @@ export const SmartUploadArea: React.FC<SmartUploadAreaProps> = ({ onAnalysisComp
         // Salvar no banco de dados
         const analise = {
           id: `analise_${Date.now()}`,
-          nome: `Análise - ${arquivo.name}`,
+          nome: `Análise IA - ${arquivo.name}`,
           data_criacao: new Date().toISOString(),
           documentos: [arquivo.name],
           resultado_analise: resultadoAnalise,
@@ -102,7 +118,7 @@ export const SmartUploadArea: React.FC<SmartUploadAreaProps> = ({ onAnalysisComp
 
         // Notificar conclusão
         onAnalysisComplete(analise);
-        toast.success(`Análise de ${arquivo.name} concluída!`);
+        toast.success(`Análise IA de ${arquivo.name} concluída!`);
 
       } catch (error) {
         console.error('Erro ao processar arquivo:', error);
@@ -112,6 +128,24 @@ export const SmartUploadArea: React.FC<SmartUploadAreaProps> = ({ onAnalysisComp
         toast.error(`Erro ao processar ${arquivo.name}: ${error}`);
       }
     }
+  };
+
+  const compilePrompt = (config: any): string => {
+    let prompt = config.systemPrompt;
+    
+    // Replace placeholders
+    prompt = prompt.replace('{industry}', config.businessContext?.industry || 'Não especificado');
+    prompt = prompt.replace('{companySize}', config.businessContext?.companySize || 'Não especificado');
+    prompt = prompt.replace('{budget}', config.businessContext?.budget || 'Não especificado');
+    prompt = prompt.replace('{priorities}', config.businessContext?.priorities?.join(', ') || 'Não especificado');
+    prompt = prompt.replace('{priceWeight}', config.analysisRules?.priceWeight?.toString() || '40');
+    prompt = prompt.replace('{deliveryWeight}', config.analysisRules?.deliveryWeight?.toString() || '20');
+    prompt = prompt.replace('{qualityWeight}', config.analysisRules?.qualityWeight?.toString() || '25');
+    prompt = prompt.replace('{paymentTermsWeight}', config.analysisRules?.paymentTermsWeight?.toString() || '15');
+    prompt = prompt.replace('{customCriteria}', config.analysisRules?.customCriteria?.join('\n- ') || 'Nenhum critério personalizado');
+    prompt = prompt.replace('{customInstructions}', config.customInstructions || 'Nenhuma instrução específica');
+
+    return prompt;
   };
 
   const analisarTodos = async () => {
@@ -141,7 +175,7 @@ export const SmartUploadArea: React.FC<SmartUploadAreaProps> = ({ onAnalysisComp
         // Salvar análise comparativa
         const analiseComparativa = {
           id: `comparacao_${Date.now()}`,
-          nome: 'Análise Comparativa Completa',
+          nome: 'Análise Comparativa IA Completa',
           data_criacao: new Date().toISOString(),
           documentos: documentosConcluidos.map(d => d.nome),
           resultado_analise: comparacao,
@@ -150,7 +184,7 @@ export const SmartUploadArea: React.FC<SmartUploadAreaProps> = ({ onAnalysisComp
 
         await databaseService.saveAnalysis(analiseComparativa);
         onAnalysisComplete(analiseComparativa);
-        toast.success('Análise comparativa concluída!');
+        toast.success('Análise comparativa IA concluída!');
       }
     } catch (error) {
       toast.error('Erro na análise comparativa: ' + error);
@@ -184,6 +218,10 @@ export const SmartUploadArea: React.FC<SmartUploadAreaProps> = ({ onAnalysisComp
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  // Check if custom AI config is active
+  const customConfig = localStorage.getItem('ai_assistant_config');
+  const hasCustomConfig = customConfig ? JSON.parse(customConfig).isActive : false;
+
   return (
     <div className="w-full max-w-4xl mx-auto space-y-6">
       {/* Status da Configuração */}
@@ -193,6 +231,30 @@ export const SmartUploadArea: React.FC<SmartUploadAreaProps> = ({ onAnalysisComp
             <AlertCircle className="w-5 h-5 text-yellow-600" />
             <p className="text-yellow-800">
               Configure a OpenAI na aba <strong>Configurações</strong> para habilitar a análise inteligente
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* AI Configuration Status */}
+      {openAIService.isConfigured() && (
+        <div className={`border rounded-lg p-4 ${hasCustomConfig ? 'bg-purple-50 border-purple-200' : 'bg-blue-50 border-blue-200'}`}>
+          <div className="flex items-center space-x-2">
+            <Bot className={`w-5 h-5 ${hasCustomConfig ? 'text-purple-600' : 'text-blue-600'}`} />
+            <p className={hasCustomConfig ? 'text-purple-800' : 'text-blue-800'}>
+              {hasCustomConfig ? (
+                <>
+                  <strong>Assistente IA Personalizado Ativo:</strong> {JSON.parse(customConfig).name}
+                  <br />
+                  <span className="text-sm">Análises serão feitas com suas configurações personalizadas</span>
+                </>
+              ) : (
+                <>
+                  <strong>Assistente IA Padrão Ativo</strong>
+                  <br />
+                  <span className="text-sm">Configure o "Cérebro IA" para personalizar as análises</span>
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -236,7 +298,7 @@ export const SmartUploadArea: React.FC<SmartUploadAreaProps> = ({ onAnalysisComp
             </p>
             <div className="flex items-center justify-center space-x-2 mt-2 text-xs text-blue-600">
               <Bot className="w-4 h-4" />
-              <span>Análise automática com IA</span>
+              <span>Análise automática com IA {hasCustomConfig ? 'personalizada' : 'padrão'}</span>
             </div>
           </div>
         </div>
@@ -254,14 +316,14 @@ export const SmartUploadArea: React.FC<SmartUploadAreaProps> = ({ onAnalysisComp
               <button
                 onClick={analisarTodos}
                 disabled={analyzing}
-                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
               >
                 {analyzing ? (
                   <Loader className="w-4 h-4 animate-spin" />
                 ) : (
                   <Bot className="w-4 h-4" />
                 )}
-                <span>{analyzing ? 'Analisando...' : 'Análise Comparativa'}</span>
+                <span>{analyzing ? 'Analisando...' : 'Análise Comparativa IA'}</span>
               </button>
             )}
           </div>

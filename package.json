@@ -2,7 +2,7 @@
   "name": "sistema-analise-cotacoes",
   "private": true,
   "version": "1.0.0",
-  "type": "module",
+  "type": "commonjs",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
