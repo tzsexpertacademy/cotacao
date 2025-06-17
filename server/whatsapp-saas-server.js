@@ -246,7 +246,7 @@ app.post('/api/saas/create-tenant', (req, res) => {
   try {
     createWhatsAppInstance(tenantId);
     
-    // 🔥 CORREÇÃO: SEMPRE usar IP público com porta 5173
+    // 🔥 CORREÇÃO: SEMPRE usar IP público com porta 3002
     const accessUrl = `http://146.59.227.248:5173?tenant=${tenantId}`;
     
     res.json({
