@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Brain, Save, TestTube, RefreshCw, Settings, Zap, Target, AlertCircle, CheckCircle, Copy, Download, Upload } from 'lucide-react';
+import { Brain, Save, TestTube, RefreshCw, Settings, Zap, Target, AlertCircle, CheckCircle, Copy, Download, Upload, Sparkles } from 'lucide-react';
 import { openAIService } from '../services/openai';
 import toast from 'react-hot-toast';
 
@@ -27,12 +27,91 @@ interface AssistantPromptConfig {
     companySize: string;
     budget: string;
     priorities: string[];
+    productCatalog: string;
   };
   customInstructions: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
 }
+
+const TEMPLATE_CONFIGS = {
+  'foco-preco': {
+    name: 'Foco em Preço',
+    description: 'Prioriza o menor custo com qualidade mínima aceitável',
+    analysisRules: {
+      priceWeight: 60,
+      deliveryWeight: 15,
+      qualityWeight: 15,
+      paymentTermsWeight: 10,
+      customCriteria: ['Desconto por volume', 'Condições de pagamento flexíveis']
+    },
+    businessContext: {
+      priorities: ['Redução de custos', 'Economia máxima', 'ROI rápido']
+    },
+    customInstructions: 'Sempre priorize a opção mais econômica, mas verifique se atende aos requisitos mínimos de qualidade. Identifique oportunidades de desconto e negociação.'
+  },
+  'foco-qualidade': {
+    name: 'Foco em Qualidade',
+    description: 'Prioriza qualidade e confiabilidade sobre preço',
+    analysisRules: {
+      priceWeight: 20,
+      deliveryWeight: 20,
+      qualityWeight: 45,
+      paymentTermsWeight: 15,
+      customCriteria: ['Garantia estendida', 'Certificações', 'Reputação do fornecedor']
+    },
+    businessContext: {
+      priorities: ['Qualidade superior', 'Durabilidade', 'Confiabilidade', 'Suporte técnico']
+    },
+    customInstructions: 'Priorize fornecedores com histórico comprovado, certificações relevantes e garantias estendidas. O preço é secundário à qualidade e confiabilidade.'
+  },
+  'equilibrado': {
+    name: 'Equilibrado',
+    description: 'Balanceamento entre preço, qualidade e prazo',
+    analysisRules: {
+      priceWeight: 35,
+      deliveryWeight: 25,
+      qualityWeight: 25,
+      paymentTermsWeight: 15,
+      customCriteria: ['Custo-benefício', 'Prazo de entrega', 'Flexibilidade']
+    },
+    businessContext: {
+      priorities: ['Custo-benefício', 'Prazo adequado', 'Qualidade satisfatória']
+    },
+    customInstructions: 'Busque o melhor equilíbrio entre preço, qualidade e prazo. Considere o valor total da proposta, não apenas o preço inicial.'
+  },
+  'urgencia': {
+    name: 'Foco em Urgência',
+    description: 'Prioriza prazo de entrega para demandas urgentes',
+    analysisRules: {
+      priceWeight: 25,
+      deliveryWeight: 50,
+      qualityWeight: 15,
+      paymentTermsWeight: 10,
+      customCriteria: ['Entrega expressa', 'Disponibilidade imediata', 'Logística eficiente']
+    },
+    businessContext: {
+      priorities: ['Entrega rápida', 'Disponibilidade', 'Agilidade']
+    },
+    customInstructions: 'Priorize fornecedores que podem entregar no menor prazo possível. Considere custos adicionais de entrega expressa como investimento necessário.'
+  },
+  'sustentabilidade': {
+    name: 'Foco em Sustentabilidade',
+    description: 'Prioriza critérios ambientais e sociais',
+    analysisRules: {
+      priceWeight: 25,
+      deliveryWeight: 20,
+      qualityWeight: 25,
+      paymentTermsWeight: 10,
+      customCriteria: ['Certificações ambientais', 'Responsabilidade social', 'Produtos eco-friendly', 'Logística verde']
+    },
+    businessContext: {
+      priorities: ['Sustentabilidade', 'Responsabilidade ambiental', 'Certificações verdes']
+    },
+    customInstructions: 'Priorize fornecedores com certificações ambientais (ISO 14001, FSC, etc.), práticas sustentáveis e produtos eco-friendly. Considere o impacto ambiental total.'
+  }
+};
 
 const DEFAULT_PROMPT_CONFIG: Omit<AssistantPromptConfig, 'id' | 'createdAt' | 'updatedAt'> = {
   name: 'Configuração Padrão',
@@ -44,6 +123,9 @@ CONTEXTO DA EMPRESA:
 - Porte: {companySize}
 - Orçamento: {budget}
 - Prioridades: {priorities}
+
+CATÁLOGO DE PRODUTOS DA EMPRESA:
+{productCatalog}
 
 CRITÉRIOS DE ANÁLISE (Pesos):
 - Preço: {priceWeight}%
@@ -57,6 +139,8 @@ CRITÉRIOS PERSONALIZADOS:
 INSTRUÇÕES ESPECÍFICAS:
 {customInstructions}
 
+IMPORTANTE: Ao analisar produtos, sempre verifique se correspondem aos itens do catálogo da empresa. Se houver divergências, sinalize e sugira alternativas compatíveis.
+
 FORMATO DE SAÍDA OBRIGATÓRIO:
 Sempre retorne dados no formato JSON estruturado:
 {
@@ -65,6 +149,11 @@ Sempre retorne dados no formato JSON estruturado:
       "id": "string_unico",
       "descricao": "string",
       "quantidade": number,
+      "compatibilidade_catalogo": {
+        "item_catalogo": "string ou null",
+        "compativel": boolean,
+        "observacoes": "string"
+      },
       "cotacoes": [
         {
           "fornecedor": "string",
@@ -109,7 +198,8 @@ Sempre retorne dados no formato JSON estruturado:
     "pontos_atencao": ["string"],
     "oportunidades": ["string"],
     "riscos_identificados": ["string"],
-    "sugestoes_negociacao": ["string"]
+    "sugestoes_negociacao": ["string"],
+    "compatibilidade_geral": "string"
   }
 }
 
@@ -120,7 +210,9 @@ REGRAS IMPORTANTES:
 4. Forneça recomendações práticas e acionáveis
 5. Considere aspectos qualitativos além do preço
 6. Identifique oportunidades de negociação
-7. Alerte sobre riscos potenciais`,
+7. Alerte sobre riscos potenciais
+8. Verifique compatibilidade com catálogo da empresa
+9. Sugira alternativas quando necessário`,
   analysisRules: {
     priceWeight: 40,
     deliveryWeight: 20,
@@ -139,7 +231,8 @@ REGRAS IMPORTANTES:
     industry: '',
     companySize: '',
     budget: '',
-    priorities: []
+    priorities: [],
+    productCatalog: ''
   },
   customInstructions: '',
   isActive: true
@@ -198,6 +291,32 @@ export const AIAssistantConfig: React.FC = () => {
     }
   };
 
+  const applyTemplate = (templateKey: string) => {
+    if (!config) return;
+    
+    const template = TEMPLATE_CONFIGS[templateKey as keyof typeof TEMPLATE_CONFIGS];
+    if (!template) return;
+
+    const updatedConfig = {
+      ...config,
+      name: template.name,
+      description: template.description,
+      analysisRules: {
+        ...config.analysisRules,
+        ...template.analysisRules
+      },
+      businessContext: {
+        ...config.businessContext,
+        priorities: template.businessContext.priorities
+      },
+      customInstructions: template.customInstructions,
+      updatedAt: new Date().toISOString()
+    };
+
+    setConfig(updatedConfig);
+    toast.success(`Template "${template.name}" aplicado com sucesso!`);
+  };
+
   const compilePrompt = (cfg: AssistantPromptConfig): string => {
     let prompt = cfg.systemPrompt;
     
@@ -206,6 +325,7 @@ export const AIAssistantConfig: React.FC = () => {
     prompt = prompt.replace('{companySize}', cfg.businessContext.companySize || 'Não especificado');
     prompt = prompt.replace('{budget}', cfg.businessContext.budget || 'Não especificado');
     prompt = prompt.replace('{priorities}', cfg.businessContext.priorities.join(', ') || 'Não especificado');
+    prompt = prompt.replace('{productCatalog}', cfg.businessContext.productCatalog || 'Catálogo não fornecido - analise produtos conforme especificações técnicas');
     prompt = prompt.replace('{priceWeight}', cfg.analysisRules.priceWeight.toString());
     prompt = prompt.replace('{deliveryWeight}', cfg.analysisRules.deliveryWeight.toString());
     prompt = prompt.replace('{qualityWeight}', cfg.analysisRules.qualityWeight.toString());
@@ -366,8 +486,8 @@ Observações: IPS, HDMI + VGA
   const tabs = [
     { id: 'basic' as const, label: 'Configuração Básica', icon: Settings },
     { id: 'advanced' as const, label: 'Configuração Avançada', icon: Brain },
-    { id: 'test' as const, label: 'Testar Configuração', icon: TestTube },
-    { id: 'templates' as const, label: 'Templates', icon: Target }
+    { id: 'templates' as const, label: 'Templates', icon: Sparkles },
+    { id: 'test' as const, label: 'Testar Configuração', icon: TestTube }
   ];
 
   return (
@@ -576,6 +696,35 @@ Observações: IPS, HDMI + VGA
                 </div>
               </div>
 
+              {/* Product Catalog */}
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Catálogo de Produtos da Empresa
+                </label>
+                <textarea
+                  value={config.businessContext.productCatalog}
+                  onChange={(e) => setConfig({
+                    ...config,
+                    businessContext: { ...config.businessContext, productCatalog: e.target.value }
+                  })}
+                  rows={8}
+                  placeholder="Liste os produtos que sua empresa costuma comprar, especificações técnicas, marcas preferenciais, etc.
+
+Exemplo:
+- Notebooks: Dell Inspiron 15, Lenovo ThinkPad E15 (mínimo i5, 8GB RAM, SSD 256GB)
+- Monitores: LG, Samsung, AOC (24-27 polegadas, Full HD mínimo)
+- Impressoras: HP LaserJet, Canon (multifuncional, rede, duplex)
+- Smartphones: iPhone, Samsung Galaxy (corporativo, dual chip)
+- Tablets: iPad, Samsung Tab (10 polegadas mínimo)
+- Acessórios: Teclados ABNT2, mouses wireless, cabos HDMI
+- Software: Microsoft Office, Adobe Creative, antivírus corporativo"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  A IA usará este catálogo para verificar compatibilidade dos produtos cotados e sugerir alternativas
+                </p>
+              </div>
+
               {/* Priorities */}
               <div className="mt-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -734,13 +883,13 @@ Observações: IPS, HDMI + VGA
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Prompt do Sistema</h3>
               <p className="text-sm text-gray-600 mb-4">
-                Configure as instruções detalhadas que o assistente seguirá. Use variáveis como {'{industry}'}, {'{priceWeight}'}, etc.
+                Configure as instruções detalhadas que o assistente seguirá. Use variáveis como {'{industry}'}, {'{priceWeight}'}, {'{productCatalog}'}, etc.
               </p>
               
               <textarea
                 value={config.systemPrompt}
                 onChange={(e) => setConfig({ ...config, systemPrompt: e.target.value })}
-                rows={20}
+                rows={25}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono text-sm"
               />
             </div>
@@ -843,6 +992,47 @@ Observações: IPS, HDMI + VGA
           </div>
         )}
 
+        {/* Templates */}
+        {activeTab === 'templates' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Templates Pré-configurados</h3>
+              <p className="text-gray-600 mb-6">
+                Aplique configurações otimizadas para diferentes cenários de negócio
+              </p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {Object.entries(TEMPLATE_CONFIGS).map(([key, template]) => (
+                  <div key={key} className="border border-gray-200 rounded-lg p-6 hover:border-purple-300 transition-colors">
+                    <div className="flex items-center space-x-2 mb-3">
+                      <Sparkles className="w-5 h-5 text-purple-600" />
+                      <h4 className="font-medium text-gray-900">{template.name}</h4>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-4">{template.description}</p>
+                    
+                    <div className="space-y-2 mb-4">
+                      <div className="text-xs text-gray-500">Pesos dos critérios:</div>
+                      <div className="grid grid-cols-2 gap-1 text-xs">
+                        <div>Preço: {template.analysisRules.priceWeight}%</div>
+                        <div>Prazo: {template.analysisRules.deliveryWeight}%</div>
+                        <div>Qualidade: {template.analysisRules.qualityWeight}%</div>
+                        <div>Pagamento: {template.analysisRules.paymentTermsWeight}%</div>
+                      </div>
+                    </div>
+                    
+                    <button 
+                      onClick={() => applyTemplate(key)}
+                      className="w-full px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                    >
+                      Aplicar Template
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Test Configuration */}
         {activeTab === 'test' && (
           <div className="space-y-6">
@@ -887,42 +1077,6 @@ Observações: IPS, HDMI + VGA
                   </pre>
                 </div>
               )}
-            </div>
-          </div>
-        )}
-
-        {/* Templates */}
-        {activeTab === 'templates' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Templates Pré-configurados</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {/* Template cards would go here */}
-                <div className="border border-gray-200 rounded-lg p-4">
-                  <h4 className="font-medium text-gray-900 mb-2">Foco em Preço</h4>
-                  <p className="text-sm text-gray-600 mb-3">Prioriza o menor custo com qualidade mínima aceitável</p>
-                  <button className="text-purple-600 hover:text-purple-800 text-sm">
-                    Aplicar Template
-                  </button>
-                </div>
-                
-                <div className="border border-gray-200 rounded-lg p-4">
-                  <h4 className="font-medium text-gray-900 mb-2">Foco em Qualidade</h4>
-                  <p className="text-sm text-gray-600 mb-3">Prioriza qualidade e confiabilidade sobre preço</p>
-                  <button className="text-purple-600 hover:text-purple-800 text-sm">
-                    Aplicar Template
-                  </button>
-                </div>
-                
-                <div className="border border-gray-200 rounded-lg p-4">
-                  <h4 className="font-medium text-gray-900 mb-2">Equilibrado</h4>
-                  <p className="text-sm text-gray-600 mb-3">Balanceamento entre preço, qualidade e prazo</p>
-                  <button className="text-purple-600 hover:text-purple-800 text-sm">
-                    Aplicar Template
-                  </button>
-                </div>
-              </div>
             </div>
           </div>
         )}

@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Upload, FileText, X, CheckCircle, AlertCircle, Loader, Bot } from 'lucide-react';
+import { Upload, FileText, X, CheckCircle, AlertCircle, Loader, Bot, HardDrive, Image, FileSpreadsheet, FileImage } from 'lucide-react';
 import { DocumentoUpload } from '../types';
 import { documentProcessor } from '../services/documentProcessor';
 import { openAIService } from '../services/openai';
@@ -48,6 +48,19 @@ export const SmartUploadArea: React.FC<SmartUploadAreaProps> = ({ onAnalysisComp
       return;
     }
 
+    // Check file types and sizes
+    const supportedTypes = documentProcessor.getSupportedTypes();
+    const invalidFiles = arquivos.filter(arquivo => {
+      const isSupported = supportedTypes.includes(arquivo.type) || 
+                         arquivo.name.match(/\.(pdf|docx?|xlsx?|csv|txt|rtf|odt|jpe?g|png|gif|bmp|webp)$/i);
+      return !isSupported;
+    });
+
+    if (invalidFiles.length > 0) {
+      toast.error(`Arquivos não suportados: ${invalidFiles.map(f => f.name).join(', ')}`);
+      return;
+    }
+
     const novosDocumentos: DocumentoUpload[] = arquivos.map((arquivo, index) => ({
       id: `doc_${Date.now()}_${index}`,
       nome: arquivo.name,
@@ -70,6 +83,8 @@ export const SmartUploadArea: React.FC<SmartUploadAreaProps> = ({ onAnalysisComp
           d.id === doc.id ? { ...d, status: 'processando', progresso: 25 } : d
         ));
 
+        toast.loading(`Processando ${arquivo.name}...`, { id: doc.id });
+
         // Extrair conteúdo do documento
         const conteudo = await documentProcessor.processFile(arquivo);
         
@@ -87,13 +102,16 @@ export const SmartUploadArea: React.FC<SmartUploadAreaProps> = ({ onAnalysisComp
             // Usar prompt personalizado
             const compiledPrompt = compilePrompt(config);
             resultadoAnalise = await openAIService.analyzeDocumentWithCustomPrompt(conteudo, arquivo.name, compiledPrompt);
+            toast.loading(`Analisando com IA personalizada...`, { id: doc.id });
           } else {
             // Usar análise padrão
             resultadoAnalise = await openAIService.analyzeDocument(conteudo, arquivo.name);
+            toast.loading(`Analisando com IA padrão...`, { id: doc.id });
           }
         } else {
           // Usar análise padrão
           resultadoAnalise = await openAIService.analyzeDocument(conteudo, arquivo.name);
+          toast.loading(`Analisando com IA padrão...`, { id: doc.id });
         }
         
         setDocumentos(prev => prev.map(d => 
@@ -118,14 +136,14 @@ export const SmartUploadArea: React.FC<SmartUploadAreaProps> = ({ onAnalysisComp
 
         // Notificar conclusão
         onAnalysisComplete(analise);
-        toast.success(`Análise IA de ${arquivo.name} concluída!`);
+        toast.success(`Análise IA de ${arquivo.name} concluída!`, { id: doc.id });
 
       } catch (error) {
         console.error('Erro ao processar arquivo:', error);
         setDocumentos(prev => prev.map(d => 
           d.id === doc.id ? { ...d, status: 'erro', progresso: 0 } : d
         ));
-        toast.error(`Erro ao processar ${arquivo.name}: ${error}`);
+        toast.error(`Erro ao processar ${arquivo.name}: ${error}`, { id: doc.id });
       }
     }
   };
@@ -138,6 +156,7 @@ export const SmartUploadArea: React.FC<SmartUploadAreaProps> = ({ onAnalysisComp
     prompt = prompt.replace('{companySize}', config.businessContext?.companySize || 'Não especificado');
     prompt = prompt.replace('{budget}', config.businessContext?.budget || 'Não especificado');
     prompt = prompt.replace('{priorities}', config.businessContext?.priorities?.join(', ') || 'Não especificado');
+    prompt = prompt.replace('{productCatalog}', config.businessContext?.productCatalog || 'Catálogo não fornecido - analise produtos conforme especificações técnicas');
     prompt = prompt.replace('{priceWeight}', config.analysisRules?.priceWeight?.toString() || '40');
     prompt = prompt.replace('{deliveryWeight}', config.analysisRules?.deliveryWeight?.toString() || '20');
     prompt = prompt.replace('{qualityWeight}', config.analysisRules?.qualityWeight?.toString() || '25');
@@ -210,10 +229,26 @@ export const SmartUploadArea: React.FC<SmartUploadAreaProps> = ({ onAnalysisComp
     }
   };
 
+  const getFileIcon = (fileName: string, fileType: string) => {
+    const name = fileName.toLowerCase();
+    const type = fileType.toLowerCase();
+    
+    if (type.includes('image') || name.match(/\.(jpg|jpeg|png|gif|bmp|webp)$/)) {
+      return <FileImage className="w-5 h-5 text-purple-500" />;
+    }
+    if (type.includes('sheet') || name.match(/\.(xlsx?|csv)$/)) {
+      return <FileSpreadsheet className="w-5 h-5 text-green-500" />;
+    }
+    if (type.includes('pdf')) {
+      return <FileText className="w-5 h-5 text-red-500" />;
+    }
+    return <FileText className="w-5 h-5 text-blue-500" />;
+  };
+
   const formatarTamanho = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
@@ -260,6 +295,45 @@ export const SmartUploadArea: React.FC<SmartUploadAreaProps> = ({ onAnalysisComp
         </div>
       )}
 
+      {/* Supported File Types */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <h4 className="font-medium text-gray-900 mb-3">Tipos de Arquivo Suportados (SEM LIMITE DE TAMANHO)</h4>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          <div className="flex items-center space-x-2">
+            <FileText className="w-4 h-4 text-red-500" />
+            <span>PDF</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <FileText className="w-4 h-4 text-blue-500" />
+            <span>Word (DOC, DOCX)</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <FileSpreadsheet className="w-4 h-4 text-green-500" />
+            <span>Excel (XLS, XLSX)</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <FileText className="w-4 h-4 text-gray-500" />
+            <span>Texto (TXT, RTF)</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <FileImage className="w-4 h-4 text-purple-500" />
+            <span>Imagens (JPG, PNG)</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <FileSpreadsheet className="w-4 h-4 text-orange-500" />
+            <span>CSV</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <FileText className="w-4 h-4 text-indigo-500" />
+            <span>ODT</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <HardDrive className="w-4 h-4 text-gray-600" />
+            <span>Qualquer tamanho</span>
+          </div>
+        </div>
+      </div>
+
       {/* Área de Upload */}
       <div
         className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 ${
@@ -275,7 +349,7 @@ export const SmartUploadArea: React.FC<SmartUploadAreaProps> = ({ onAnalysisComp
         <input
           type="file"
           multiple
-          accept=".pdf,.doc,.docx,.xls,.xlsx,.txt"
+          accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.rtf,.odt,.jpg,.jpeg,.png,.gif,.bmp,.webp"
           onChange={handleChange}
           disabled={!openAIService.isConfigured()}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
@@ -293,8 +367,11 @@ export const SmartUploadArea: React.FC<SmartUploadAreaProps> = ({ onAnalysisComp
             <p className="text-gray-600 mb-4">
               Arraste e solte os arquivos aqui ou clique para selecionar
             </p>
-            <p className="text-sm text-gray-500">
-              Suporte para PDF, Word, Excel e arquivos de texto
+            <p className="text-sm text-gray-500 mb-2">
+              Suporte para PDF, Word, Excel, Imagens e mais
+            </p>
+            <p className="text-sm font-medium text-green-600">
+              ✅ SEM LIMITE DE TAMANHO - Processe arquivos de qualquer tamanho
             </p>
             <div className="flex items-center justify-center space-x-2 mt-2 text-xs text-blue-600">
               <Bot className="w-4 h-4" />
@@ -333,15 +410,24 @@ export const SmartUploadArea: React.FC<SmartUploadAreaProps> = ({ onAnalysisComp
               <div key={doc.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3 flex-1">
+                    {getFileIcon(doc.nome, doc.tipo)}
                     {getStatusIcon(doc.status)}
                     
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">
                         {doc.nome}
                       </p>
-                      <p className="text-xs text-gray-500">
-                        {formatarTamanho(doc.tamanho)}
-                      </p>
+                      <div className="flex items-center space-x-2 text-xs text-gray-500">
+                        <span>{formatarTamanho(doc.tamanho)}</span>
+                        <span>•</span>
+                        <span>{doc.tipo || 'Tipo desconhecido'}</span>
+                        {doc.status === 'concluido' && (
+                          <>
+                            <span>•</span>
+                            <span className="text-green-600 font-medium">✅ Processado com IA</span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                   
