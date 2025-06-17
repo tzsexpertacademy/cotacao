@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, BarChart3, Upload as UploadIcon, Settings, Download, MessageSquare, Brain } from 'lucide-react';
+import { FileText, BarChart3, Upload as UploadIcon, Settings, Download, MessageSquare, Brain, ShoppingCart } from 'lucide-react';
 import { SmartUploadArea } from './components/SmartUploadArea';
 import { ComparacaoTable } from './components/ComparacaoTable';
 import { Dashboard } from './components/Dashboard';
 import { ConfigurationPanel } from './components/ConfigurationPanel';
 import { WhatsAppIntegrated } from './components/WhatsAppIntegrated';
 import { WhatsAppCotacoesManager } from './components/WhatsAppCotacoesManager';
+import { ListaComprasManager } from './components/ListaComprasManager';
 import { DocumentoUpload, AnaliseCompleta, FiltrosComparacao } from './types';
 import { databaseService } from './services/database';
 import { Toaster } from 'react-hot-toast';
 
-type TabAtiva = 'dashboard' | 'upload' | 'comparacao' | 'whatsapp' | 'whatsapp-cotacoes' | 'configuracoes';
+type TabAtiva = 'dashboard' | 'upload' | 'comparacao' | 'whatsapp' | 'whatsapp-cotacoes' | 'lista-compras' | 'configuracoes';
 
 function App() {
   const [tabAtiva, setTabAtiva] = useState<TabAtiva>('dashboard');
@@ -88,6 +89,7 @@ function App() {
     { id: 'comparacao' as TabAtiva, label: 'Comparação', icon: FileText },
     { id: 'whatsapp' as TabAtiva, label: 'WhatsApp', icon: MessageSquare },
     { id: 'whatsapp-cotacoes' as TabAtiva, label: 'Cotações WhatsApp', icon: Brain },
+    { id: 'lista-compras' as TabAtiva, label: 'Lista de Compras', icon: ShoppingCart },
     { id: 'configuracoes' as TabAtiva, label: 'Configurações', icon: Settings }
   ];
 
@@ -250,6 +252,21 @@ function App() {
             </div>
             
             <WhatsAppCotacoesManager />
+          </div>
+        )}
+
+        {tabAtiva === 'lista-compras' && (
+          <div className="space-y-6">
+            <div className="text-center">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Lista de Compras Inteligente
+              </h2>
+              <p className="text-gray-600 max-w-2xl mx-auto">
+                Selecione as melhores oportunidades identificadas pela IA e gere uma lista organizada para solicitar aos fornecedores.
+              </p>
+            </div>
+            
+            <ListaComprasManager />
           </div>
         )}
 
