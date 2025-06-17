@@ -48,8 +48,8 @@ interface WhatsAppUser {
   number: string;
 }
 
-// 🔥 SEMPRE usar IP público para o servidor
-const SERVER_URL = 'http://146.59.227.248:3001';
+// 🔥 USAR NOVA PORTA 3002 PARA EVITAR CONFLITO
+const SERVER_URL = 'http://146.59.227.248:3002';
 
 export const WhatsAppSaaSClient: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'qr' | 'dashboard' | 'messages' | 'contacts' | 'settings'>('qr');
