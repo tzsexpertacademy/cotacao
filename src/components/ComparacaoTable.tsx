@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { ChevronUp, ChevronDown, Star, Clock, CreditCard, AlertTriangle } from 'lucide-react';
+import { ChevronUp, ChevronDown, Star, Clock, CreditCard, AlertTriangle, Brain, Target, TrendingUp, Award } from 'lucide-react';
 import { Produto, FiltrosComparacao } from '../types';
 
 interface ComparacaoTableProps {
@@ -58,10 +58,17 @@ export const ComparacaoTable: React.FC<ComparacaoTableProps> = ({
     }).format(valor);
   };
 
-  const getStatusColor = (isMelhor: boolean, temProblemas: boolean) => {
+  const getStatusColor = (isMelhor: boolean, temProblemas: boolean, isRecommended: boolean) => {
     if (temProblemas) return 'bg-yellow-50 border-yellow-200';
+    if (isRecommended) return 'bg-purple-50 border-purple-200';
     if (isMelhor) return 'bg-green-50 border-green-200';
     return 'bg-white border-gray-200';
+  };
+
+  const getQualityColor = (score: number) => {
+    if (score >= 8) return 'text-green-600';
+    if (score >= 6) return 'text-yellow-600';
+    return 'text-red-600';
   };
 
   const toggleFornecedor = (fornecedor: string) => {
@@ -77,6 +84,18 @@ export const ComparacaoTable: React.FC<ComparacaoTableProps> = ({
 
   return (
     <div className="w-full">
+      {/* AI Analysis Header */}
+      <div className="mb-6 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+        <div className="flex items-center space-x-2 mb-2">
+          <Brain className="w-5 h-5 text-purple-600" />
+          <h3 className="font-medium text-purple-900">Análise Inteligente por IA</h3>
+        </div>
+        <p className="text-sm text-purple-800">
+          Os dados abaixo foram processados e analisados pelo assistente IA, incluindo scores de qualidade, 
+          recomendações personalizadas e identificação de riscos.
+        </p>
+      </div>
+
       {/* Filtros */}
       <div className="mb-6 p-4 bg-gray-50 rounded-lg">
         <div className="flex flex-wrap gap-4 items-center">
@@ -142,17 +161,41 @@ export const ComparacaoTable: React.FC<ComparacaoTableProps> = ({
             return true;
           });
 
+          // Check if this product has AI recommendation
+          const hasRecommendation = produto.recomendacao;
+
           return (
             <div key={produto.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
               <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-900">
-                      {produto.descricao}
-                    </h3>
+                    <div className="flex items-center space-x-2">
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        {produto.descricao}
+                      </h3>
+                      {hasRecommendation && (
+                        <div className="flex items-center space-x-1 px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-medium">
+                          <Brain className="w-3 h-3" />
+                          <span>IA</span>
+                        </div>
+                      )}
+                    </div>
                     <p className="text-sm text-gray-600">
                       Quantidade: {produto.quantidade.toLocaleString()} unidades
                     </p>
+                    {hasRecommendation && (
+                      <div className="mt-2 p-2 bg-purple-50 rounded text-sm">
+                        <p className="text-purple-800">
+                          <strong>Recomendação IA:</strong> {hasRecommendation.fornecedor_recomendado}
+                        </p>
+                        <p className="text-purple-700">{hasRecommendation.motivo}</p>
+                        {hasRecommendation.economia_potencial > 0 && (
+                          <p className="text-green-700 font-medium">
+                            Economia: {formatarMoeda(hasRecommendation.economia_potencial)}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-gray-600">Melhor oferta:</p>
@@ -167,11 +210,21 @@ export const ComparacaoTable: React.FC<ComparacaoTableProps> = ({
                 {cotacoesFiltradas.map((cotacao, index) => {
                   const isMelhor = cotacao.preco_total === melhorCotacao.preco_total;
                   const temProblemas = cotacao.dados_incompletos || false;
+                  const isRecommended = hasRecommendation?.fornecedor_recomendado === cotacao.fornecedor;
+                  
+                  // @ts-ignore - AI scores might not be in type yet
+                  const scoreQualidade = cotacao.score_qualidade || 7;
+                  // @ts-ignore
+                  const scoreConfiabilidade = cotacao.score_confiabilidade || 7;
+                  // @ts-ignore
+                  const pontosFortes = cotacao.pontos_fortes || [];
+                  // @ts-ignore
+                  const pontosFracos = cotacao.pontos_fracos || [];
 
                   return (
                     <div 
                       key={index} 
-                      className={`p-6 transition-colors ${getStatusColor(isMelhor, temProblemas)}`}
+                      className={`p-6 transition-colors ${getStatusColor(isMelhor, temProblemas, isRecommended)}`}
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
@@ -185,6 +238,12 @@ export const ComparacaoTable: React.FC<ComparacaoTableProps> = ({
                                 <span>Melhor preço</span>
                               </div>
                             )}
+                            {isRecommended && (
+                              <div className="flex items-center space-x-1 px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-medium">
+                                <Award className="w-3 h-3" />
+                                <span>Recomendado IA</span>
+                              </div>
+                            )}
                             {temProblemas && (
                               <div className="flex items-center space-x-1 px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-medium">
                                 <AlertTriangle className="w-3 h-3" />
@@ -193,7 +252,7 @@ export const ComparacaoTable: React.FC<ComparacaoTableProps> = ({
                             )}
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div className="flex items-center space-x-2">
                               <Clock className="w-4 h-4 text-gray-400" />
                               <div>
@@ -214,12 +273,65 @@ export const ComparacaoTable: React.FC<ComparacaoTableProps> = ({
                               </div>
                             </div>
 
-                            <div>
-                              <p className="text-sm text-gray-600">Observações</p>
-                              <p className="font-medium text-sm">
-                                {cotacao.observacoes || 'Nenhuma observação'}
-                              </p>
+                            <div className="flex items-center space-x-2">
+                              <Target className="w-4 h-4 text-gray-400" />
+                              <div>
+                                <p className="text-sm text-gray-600">Qualidade IA</p>
+                                <p className={`font-medium ${getQualityColor(scoreQualidade)}`}>
+                                  {scoreQualidade.toFixed(1)}/10
+                                </p>
+                              </div>
                             </div>
+
+                            <div className="flex items-center space-x-2">
+                              <TrendingUp className="w-4 h-4 text-gray-400" />
+                              <div>
+                                <p className="text-sm text-gray-600">Confiabilidade</p>
+                                <p className={`font-medium ${getQualityColor(scoreConfiabilidade)}`}>
+                                  {scoreConfiabilidade.toFixed(1)}/10
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* AI Analysis Details */}
+                          {(pontosFortes.length > 0 || pontosFracos.length > 0) && (
+                            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {pontosFortes.length > 0 && (
+                                <div>
+                                  <p className="text-sm font-medium text-green-700 mb-1">Pontos Fortes (IA):</p>
+                                  <ul className="text-sm text-green-600 space-y-1">
+                                    {pontosFortes.map((ponto: string, idx: number) => (
+                                      <li key={idx} className="flex items-start space-x-1">
+                                        <span className="text-green-500 mt-0.5">•</span>
+                                        <span>{ponto}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              
+                              {pontosFracos.length > 0 && (
+                                <div>
+                                  <p className="text-sm font-medium text-red-700 mb-1">Pontos Fracos (IA):</p>
+                                  <ul className="text-sm text-red-600 space-y-1">
+                                    {pontosFracos.map((ponto: string, idx: number) => (
+                                      <li key={idx} className="flex items-start space-x-1">
+                                        <span className="text-red-500 mt-0.5">•</span>
+                                        <span>{ponto}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="mt-4">
+                            <p className="text-sm text-gray-600">Observações</p>
+                            <p className="font-medium text-sm">
+                              {cotacao.observacoes || 'Nenhuma observação'}
+                            </p>
                           </div>
                         </div>
 

@@ -57,15 +57,68 @@ class OpenAIService {
     if (!this.client) throw new Error('OpenAI client não configurado');
 
     try {
+      // Get custom prompt if available
+      const customConfig = localStorage.getItem('ai_assistant_config');
+      let instructions = this.getDefaultInstructions();
+      
+      if (customConfig) {
+        const config = JSON.parse(customConfig);
+        if (config.isActive && config.systemPrompt) {
+          instructions = this.compilePrompt(config);
+        }
+      }
+
       const assistant = await this.client.beta.assistants.create({
         name: "Analista de Cotações Corporativas",
-        instructions: `Você é um especialista em análise de cotações corporativas. Sua função é:
+        instructions,
+        model: "gpt-4-1106-preview",
+        tools: [{ type: "code_interpreter" }]
+      });
 
-1. Analisar documentos de cotação (PDF, Word, Excel, texto)
-2. Extrair informações estruturadas: produtos, preços, quantidades, prazos, condições
-3. Comparar ofertas de diferentes fornecedores
-4. Gerar recomendações baseadas em custo-benefício
-5. Identificar oportunidades de economia
+      this.setAssistantId(assistant.id);
+      return assistant;
+    } catch (error) {
+      console.error('Erro ao criar assistente:', error);
+      throw new Error('Falha ao criar assistente: ' + (error as Error).message);
+    }
+  }
+
+  async updateAssistantPrompt(newPrompt: string) {
+    if (!this.client || !this.assistantId) {
+      throw new Error('OpenAI não configurado');
+    }
+
+    try {
+      await this.client.beta.assistants.update(this.assistantId, {
+        instructions: newPrompt
+      });
+      console.log('✅ Prompt do assistente atualizado');
+    } catch (error) {
+      console.error('Erro ao atualizar prompt:', error);
+      throw new Error('Falha ao atualizar prompt: ' + (error as Error).message);
+    }
+  }
+
+  private compilePrompt(config: any): string {
+    let prompt = config.systemPrompt;
+    
+    // Replace placeholders
+    prompt = prompt.replace('{industry}', config.businessContext?.industry || 'Não especificado');
+    prompt = prompt.replace('{companySize}', config.businessContext?.companySize || 'Não especificado');
+    prompt = prompt.replace('{budget}', config.businessContext?.budget || 'Não especificado');
+    prompt = prompt.replace('{priorities}', config.businessContext?.priorities?.join(', ') || 'Não especificado');
+    prompt = prompt.replace('{priceWeight}', config.analysisRules?.priceWeight?.toString() || '40');
+    prompt = prompt.replace('{deliveryWeight}', config.analysisRules?.deliveryWeight?.toString() || '20');
+    prompt = prompt.replace('{qualityWeight}', config.analysisRules?.qualityWeight?.toString() || '25');
+    prompt = prompt.replace('{paymentTermsWeight}', config.analysisRules?.paymentTermsWeight?.toString() || '15');
+    prompt = prompt.replace('{customCriteria}', config.analysisRules?.customCriteria?.join('\n- ') || 'Nenhum critério personalizado');
+    prompt = prompt.replace('{customInstructions}', config.customInstructions || 'Nenhuma instrução específica');
+
+    return prompt;
+  }
+
+  private getDefaultInstructions(): string {
+    return `Você é um especialista em análise de cotações corporativas com vasto conhecimento em procurement e gestão de fornecedores.
 
 IMPORTANTE: Sempre retorne dados no formato JSON estruturado:
 {
@@ -82,31 +135,51 @@ IMPORTANTE: Sempre retorne dados no formato JSON estruturado:
           "prazo_entrega_dias": number,
           "condicao_pagamento": "string",
           "observacoes": "string",
-          "dados_incompletos": boolean
+          "dados_incompletos": boolean,
+          "score_qualidade": number,
+          "score_confiabilidade": number,
+          "pontos_fortes": ["string"],
+          "pontos_fracos": ["string"]
         }
-      ]
+      ],
+      "recomendacao": {
+        "fornecedor_recomendado": "string",
+        "motivo": "string",
+        "economia_potencial": number,
+        "riscos": ["string"],
+        "alternativas": ["string"]
+      }
     }
   ],
   "resumo": {
     "total_produtos": number,
     "total_fornecedores": number,
     "economia_potencial": number,
-    "recomendacoes": ["string"]
+    "economia_percentual": number,
+    "recomendacoes_gerais": ["string"],
+    "alertas": ["string"],
+    "melhor_custo_beneficio": [
+      {
+        "produto_id": "string",
+        "fornecedor": "string",
+        "motivo": "string",
+        "economia": number
+      }
+    ]
+  },
+  "analise_detalhada": {
+    "pontos_atencao": ["string"],
+    "oportunidades": ["string"],
+    "riscos_identificados": ["string"],
+    "sugestoes_negociacao": ["string"]
   }
 }
 
 Seja preciso, objetivo e sempre identifique a melhor opção custo-benefício.
-Se encontrar dados incompletos, marque "dados_incompletos": true e explique nas observações.`,
-        model: "gpt-4-1106-preview",
-        tools: [{ type: "code_interpreter" }]
-      });
-
-      this.setAssistantId(assistant.id);
-      return assistant;
-    } catch (error) {
-      console.error('Erro ao criar assistente:', error);
-      throw new Error('Falha ao criar assistente: ' + (error as Error).message);
-    }
+Se encontrar dados incompletos, marque "dados_incompletos": true e explique nas observações.
+Forneça scores de qualidade e confiabilidade de 1-10 para cada fornecedor.
+Identifique pontos fortes e fracos de cada proposta.
+Inclua recomendações práticas e sugestões de negociação.`;
   }
 
   async analyzeDocument(content: string, fileName: string) {
@@ -174,6 +247,52 @@ Por favor, extraia todas as informações de produtos, preços, fornecedores e c
       throw new Error('Resposta inválida do assistente');
     } catch (error) {
       console.error('Erro na análise:', error);
+      throw new Error('Falha na análise: ' + (error as Error).message);
+    }
+  }
+
+  async analyzeDocumentWithCustomPrompt(content: string, fileName: string, customPrompt: string) {
+    if (!this.client) {
+      throw new Error('OpenAI não configurado');
+    }
+
+    try {
+      const response = await this.client.chat.completions.create({
+        model: "gpt-4-1106-preview",
+        messages: [
+          {
+            role: "system",
+            content: customPrompt
+          },
+          {
+            role: "user",
+            content: `Analise este documento de cotação:
+
+Arquivo: ${fileName}
+Conteúdo:
+${content}
+
+Por favor, extraia todas as informações de produtos, preços, fornecedores e condições, e retorne no formato JSON estruturado conforme suas instruções.`
+          }
+        ],
+        temperature: 0.1,
+        max_tokens: 4000
+      });
+
+      const result = response.choices[0].message.content;
+      
+      // Tentar extrair JSON da resposta
+      try {
+        const jsonMatch = result?.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          return JSON.parse(jsonMatch[0]);
+        }
+        return result;
+      } catch {
+        return result;
+      }
+    } catch (error) {
+      console.error('Erro na análise com prompt customizado:', error);
       throw new Error('Falha na análise: ' + (error as Error).message);
     }
   }
@@ -249,7 +368,17 @@ Retorne análise estruturada em JSON.`
   getStatus(): string {
     if (!this.client) return 'API Key não configurada';
     if (!this.assistantId) return 'Assistente não criado';
-    return 'Configurado e pronto';
+    
+    // Check if custom config is active
+    const customConfig = localStorage.getItem('ai_assistant_config');
+    if (customConfig) {
+      const config = JSON.parse(customConfig);
+      if (config.isActive) {
+        return `Configurado com prompt personalizado: ${config.name}`;
+      }
+    }
+    
+    return 'Configurado com prompt padrão';
   }
 }
 
