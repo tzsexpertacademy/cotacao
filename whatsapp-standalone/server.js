@@ -10,11 +10,20 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: "*",
-    methods: ["GET", "POST"]
+    methods: ["GET", "POST"],
+    allowedHeaders: ["*"],
+    credentials: false
   }
 });
 
-app.use(cors());
+// 🔥 CORS LIBERADO PARA TUDO
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["*"],
+  credentials: false
+}));
+
 app.use(express.json());
 
 let client;
@@ -56,6 +65,8 @@ const initializeWhatsApp = () => {
     
     qrCodeString = qr;
     io.emit('qr', qr);
+    
+    console.log('🔥 QR CODE DISPONÍVEL PARA FRONTEND!');
   });
 
   // WhatsApp conectado
@@ -177,18 +188,37 @@ const initializeWhatsApp = () => {
   client.initialize();
 };
 
+// 🔥 MIDDLEWARE PARA CORS EM TODAS AS ROTAS
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+});
+
 // Rotas da API
 app.get('/api/whatsapp/status', (req, res) => {
-  res.json({
+  console.log('📊 Status solicitado via API');
+  const status = {
     isReady: isClientReady,
     hasQR: qrCodeString !== null
-  });
+  };
+  console.log('📊 Retornando status:', status);
+  res.json(status);
 });
 
 app.get('/api/whatsapp/qr', (req, res) => {
+  console.log('📱 QR Code solicitado via API');
   if (qrCodeString) {
+    console.log('✅ QR Code disponível, enviando...');
     res.json({ qr: qrCodeString });
   } else {
+    console.log('❌ QR Code não disponível');
     res.status(404).json({ error: 'QR Code não disponível' });
   }
 });
@@ -322,6 +352,7 @@ app.get('/', (req, res) => {
         <style>
           body { font-family: Arial; max-width: 800px; margin: 50px auto; padding: 20px; }
           .success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 15px; border-radius: 5px; margin: 20px 0; }
+          .status { background: #f8f9fa; border: 1px solid #dee2e6; padding: 15px; border-radius: 5px; margin: 20px 0; }
         </style>
       </head>
       <body>
@@ -330,13 +361,15 @@ app.get('/', (req, res) => {
         <div class="success">
           <h3>✅ SERVIDOR WHATSAPP FUNCIONANDO!</h3>
           <p><strong>Servidor dedicado apenas para WhatsApp!</strong></p>
+          <p><strong>CORS LIBERADO PARA FRONTEND!</strong></p>
         </div>
         
-        <div>
-          <h3>📊 Status</h3>
+        <div class="status">
+          <h3>📊 Status Atual</h3>
           <p><strong>WhatsApp:</strong> ${isClientReady ? '✅ Conectado' : '❌ Desconectado'}</p>
           <p><strong>QR Code:</strong> ${qrCodeString ? '✅ Disponível' : '❌ Não disponível'}</p>
           <p><strong>Porta:</strong> 3001</p>
+          <p><strong>CORS:</strong> ✅ Liberado para todos os domínios</p>
         </div>
 
         <div>
@@ -346,6 +379,14 @@ app.get('/', (req, res) => {
             <li><a href="/api/whatsapp/qr">/api/whatsapp/qr</a></li>
             <li><a href="/api/whatsapp/chats">/api/whatsapp/chats</a></li>
           </ul>
+        </div>
+        
+        <div>
+          <h3>🔥 Para Apresentação</h3>
+          <p>1. Frontend conecta automaticamente</p>
+          <p>2. QR Code aparece na tela</p>
+          <p>3. Cliente escaneia com WhatsApp</p>
+          <p>4. Sistema funciona 100% real!</p>
         </div>
       </body>
     </html>
@@ -363,6 +404,7 @@ io.on('connection', (socket) => {
   });
 
   if (qrCodeString) {
+    console.log('📱 Enviando QR Code para cliente conectado');
     socket.emit('qr', qrCodeString);
   }
 
@@ -380,6 +422,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`📱 API: http://146.59.227.248:${PORT}/api/whatsapp/`);
   console.log('');
   console.log('🔥 SERVIDOR DEDICADO APENAS PARA WHATSAPP!');
+  console.log('🔥 CORS LIBERADO PARA FRONTEND!');
   console.log('');
   
   // Inicializar WhatsApp
