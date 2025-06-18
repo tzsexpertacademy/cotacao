@@ -40,11 +40,11 @@ interface WhatsAppUser {
   number: string;
 }
 
-// Múltiplas URLs para tentar conectar - CORRIGIDO PARA PORTA 3005
+// 🔥 CORRIGIDO: Usar porta 3001 (onde o servidor realmente está)
 const SERVER_URLS = [
-  'http://146.59.227.248:3005',
-  'http://localhost:3005',
-  'http://127.0.0.1:3005'
+  'http://146.59.227.248:3001',  // Servidor principal
+  'http://localhost:3001',       // Local development
+  'http://127.0.0.1:3001'        // Fallback local
 ];
 
 export const WhatsAppIntegrated: React.FC = () => {
@@ -70,23 +70,24 @@ export const WhatsAppIntegrated: React.FC = () => {
     for (const url of SERVER_URLS) {
       try {
         console.log(`🔌 Testando: ${url}`);
-        const response = await fetch(url, { 
+        const response = await fetch(`${url}/api/whatsapp/status`, { 
           method: 'GET',
-          mode: 'no-cors', // Permite testar mesmo com CORS
-          cache: 'no-cache'
+          mode: 'cors',
+          cache: 'no-cache',
+          signal: AbortSignal.timeout(5000) // 5 second timeout
         });
         
-        // Para no-cors, se não der erro, assume que está funcionando
-        console.log(`✅ Servidor encontrado: ${url}`);
-        return url;
+        if (response.ok) {
+          console.log(`✅ Servidor encontrado: ${url}`);
+          return url;
+        }
       } catch (error) {
         console.log(`❌ Falhou: ${url} - ${error}`);
       }
     }
     
-    // Se todos falharam, tenta o primeiro mesmo assim
-    console.log('⚠️ Nenhum servidor respondeu, usando o primeiro da lista');
-    return SERVER_URLS[0];
+    console.log('⚠️ Nenhum servidor respondeu');
+    return null;
   };
 
   // Função para buscar QR Code via API REST
@@ -100,7 +101,8 @@ export const WhatsAppIntegrated: React.FC = () => {
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json'
-        }
+        },
+        signal: AbortSignal.timeout(10000) // 10 second timeout
       });
       
       if (response.ok) {
@@ -131,7 +133,8 @@ export const WhatsAppIntegrated: React.FC = () => {
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json'
-        }
+        },
+        signal: AbortSignal.timeout(10000) // 10 second timeout
       });
       
       if (response.ok) {
@@ -219,7 +222,7 @@ export const WhatsAppIntegrated: React.FC = () => {
     
     if (!workingServer) {
       setServerStatus('offline');
-      setConnectionError('Nenhum servidor WhatsApp encontrado. Verifique se o comando "npm run whatsapp-integrated" está rodando na porta 3005.');
+      setConnectionError('Nenhum servidor WhatsApp encontrado. Verifique se o comando "npm run whatsapp-server" está rodando na porta 3001.');
       return;
     }
     
@@ -507,6 +510,7 @@ export const WhatsAppIntegrated: React.FC = () => {
                 <li key={url}>{url}</li>
               ))}
             </ul>
+            <p className="mt-2 font-medium">💡 Execute no servidor: <code>npm run whatsapp-server</code></p>
           </div>
         </div>
       )}
@@ -647,7 +651,7 @@ export const WhatsAppIntegrated: React.FC = () => {
                   {serverStatus === 'offline' && (
                     <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                       <p className="text-red-800 text-sm">
-                        ⚠️ Servidor offline. Verifique se o comando `npm run whatsapp-integrated` está rodando na porta 3005.
+                        ⚠️ Servidor offline. Execute no servidor: <code className="bg-red-100 px-2 py-1 rounded">npm run whatsapp-server</code>
                       </p>
                     </div>
                   )}
