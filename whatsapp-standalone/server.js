@@ -10,27 +10,45 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: "*",
-    methods: ["GET", "POST"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["*"],
     credentials: false
   }
 });
 
-// 🔥 CORS LIBERADO PARA TUDO
+// 🔥 CORS MÁXIMO - ACEITA TUDO
 app.use(cors({
   origin: "*",
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["*"],
-  credentials: false
+  credentials: false,
+  optionsSuccessStatus: 200
 }));
 
 app.use(express.json());
+
+// 🔥 MIDDLEWARE CORS MANUAL PARA GARANTIR
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', '*');
+  res.header('Access-Control-Max-Age', '86400');
+  
+  if (req.method === 'OPTIONS') {
+    console.log('🔧 Requisição OPTIONS recebida de:', req.get('Origin'));
+    return res.status(200).end();
+  }
+  
+  console.log(`📡 ${req.method} ${req.url} de ${req.get('Origin') || 'unknown'}`);
+  next();
+});
 
 let client;
 let isClientReady = false;
 let qrCodeString = null;
 
 console.log('🚀 Iniciando servidor WhatsApp STANDALONE...');
+console.log('🔥 CORS LIBERADO PARA TODOS OS DOMÍNIOS!');
 
 // Inicializar cliente WhatsApp
 const initializeWhatsApp = () => {
@@ -67,6 +85,7 @@ const initializeWhatsApp = () => {
     io.emit('qr', qr);
     
     console.log('🔥 QR CODE DISPONÍVEL PARA FRONTEND!');
+    console.log('📏 Tamanho do QR:', qr.length, 'caracteres');
   });
 
   // WhatsApp conectado
@@ -188,42 +207,41 @@ const initializeWhatsApp = () => {
   client.initialize();
 };
 
-// 🔥 MIDDLEWARE PARA CORS EM TODAS AS ROTAS
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
-  } else {
-    next();
-  }
-});
-
-// Rotas da API
+// Rotas da API com logs detalhados
 app.get('/api/whatsapp/status', (req, res) => {
-  console.log('📊 Status solicitado via API');
+  console.log('📊 Status solicitado via API de:', req.get('Origin') || 'unknown');
   const status = {
     isReady: isClientReady,
-    hasQR: qrCodeString !== null
+    hasQR: qrCodeString !== null,
+    timestamp: new Date().toISOString(),
+    server: 'standalone'
   };
   console.log('📊 Retornando status:', status);
   res.json(status);
 });
 
 app.get('/api/whatsapp/qr', (req, res) => {
-  console.log('📱 QR Code solicitado via API');
+  console.log('📱 QR Code solicitado via API de:', req.get('Origin') || 'unknown');
   if (qrCodeString) {
-    console.log('✅ QR Code disponível, enviando...');
-    res.json({ qr: qrCodeString });
+    console.log('✅ QR Code disponível, enviando... Tamanho:', qrCodeString.length);
+    res.json({ 
+      qr: qrCodeString,
+      timestamp: new Date().toISOString(),
+      length: qrCodeString.length
+    });
   } else {
     console.log('❌ QR Code não disponível');
-    res.status(404).json({ error: 'QR Code não disponível' });
+    res.status(404).json({ 
+      error: 'QR Code não disponível',
+      isReady: isClientReady,
+      timestamp: new Date().toISOString()
+    });
   }
 });
 
 app.post('/api/whatsapp/send', async (req, res) => {
+  console.log('📤 Envio de mensagem solicitado de:', req.get('Origin') || 'unknown');
+  
   if (!isClientReady) {
     return res.status(400).json({ error: 'WhatsApp não está conectado' });
   }
@@ -246,6 +264,8 @@ app.post('/api/whatsapp/send', async (req, res) => {
 });
 
 app.get('/api/whatsapp/chats', async (req, res) => {
+  console.log('💬 Chats solicitados de:', req.get('Origin') || 'unknown');
+  
   if (!isClientReady) {
     return res.status(400).json({ error: 'WhatsApp não está conectado' });
   }
@@ -264,6 +284,7 @@ app.get('/api/whatsapp/chats', async (req, res) => {
       unreadCount: chat.unreadCount
     }));
 
+    console.log(`💬 Retornando ${chatList.length} chats`);
     res.json(chatList);
   } catch (error) {
     console.error('Erro ao buscar chats:', error);
@@ -272,6 +293,8 @@ app.get('/api/whatsapp/chats', async (req, res) => {
 });
 
 app.get('/api/whatsapp/messages/:chatId', async (req, res) => {
+  console.log('📨 Mensagens solicitadas de:', req.get('Origin') || 'unknown');
+  
   if (!isClientReady) {
     return res.status(400).json({ error: 'WhatsApp não está conectado' });
   }
@@ -322,6 +345,8 @@ app.get('/api/whatsapp/messages/:chatId', async (req, res) => {
 });
 
 app.post('/api/whatsapp/restart', async (req, res) => {
+  console.log('🔄 Restart solicitado de:', req.get('Origin') || 'unknown');
+  
   try {
     console.log('🔄 Reiniciando WhatsApp...');
     
@@ -343,8 +368,10 @@ app.post('/api/whatsapp/restart', async (req, res) => {
   }
 });
 
-// Página inicial
+// Página inicial com mais informações
 app.get('/', (req, res) => {
+  console.log('🏠 Página inicial acessada de:', req.get('Origin') || 'unknown');
+  
   res.send(`
     <html>
       <head>
@@ -353,6 +380,7 @@ app.get('/', (req, res) => {
           body { font-family: Arial; max-width: 800px; margin: 50px auto; padding: 20px; }
           .success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 15px; border-radius: 5px; margin: 20px 0; }
           .status { background: #f8f9fa; border: 1px solid #dee2e6; padding: 15px; border-radius: 5px; margin: 20px 0; }
+          .debug { background: #e2e3e5; border: 1px solid #d6d8db; padding: 15px; border-radius: 5px; margin: 20px 0; font-family: monospace; }
         </style>
       </head>
       <body>
@@ -361,15 +389,24 @@ app.get('/', (req, res) => {
         <div class="success">
           <h3>✅ SERVIDOR WHATSAPP FUNCIONANDO!</h3>
           <p><strong>Servidor dedicado apenas para WhatsApp!</strong></p>
-          <p><strong>CORS LIBERADO PARA FRONTEND!</strong></p>
+          <p><strong>CORS MÁXIMO LIBERADO!</strong></p>
         </div>
         
         <div class="status">
           <h3>📊 Status Atual</h3>
           <p><strong>WhatsApp:</strong> ${isClientReady ? '✅ Conectado' : '❌ Desconectado'}</p>
-          <p><strong>QR Code:</strong> ${qrCodeString ? '✅ Disponível' : '❌ Não disponível'}</p>
+          <p><strong>QR Code:</strong> ${qrCodeString ? '✅ Disponível (' + qrCodeString.length + ' chars)' : '❌ Não disponível'}</p>
           <p><strong>Porta:</strong> 3001</p>
-          <p><strong>CORS:</strong> ✅ Liberado para todos os domínios</p>
+          <p><strong>CORS:</strong> ✅ Liberado para TODOS os domínios</p>
+          <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
+        </div>
+
+        <div class="debug">
+          <h3>🔧 Debug Info</h3>
+          <p><strong>Caminho:</strong> /home/ubuntu/cotacao/whatsapp-standalone/</p>
+          <p><strong>Comando:</strong> npm start</p>
+          <p><strong>Headers CORS:</strong> Access-Control-Allow-Origin: *</p>
+          <p><strong>Methods:</strong> GET, POST, PUT, DELETE, OPTIONS</p>
         </div>
 
         <div>
@@ -400,7 +437,8 @@ io.on('connection', (socket) => {
   // Enviar status atual
   socket.emit('status', {
     isReady: isClientReady,
-    hasQR: qrCodeString !== null
+    hasQR: qrCodeString !== null,
+    timestamp: new Date().toISOString()
   });
 
   if (qrCodeString) {
@@ -422,7 +460,8 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`📱 API: http://146.59.227.248:${PORT}/api/whatsapp/`);
   console.log('');
   console.log('🔥 SERVIDOR DEDICADO APENAS PARA WHATSAPP!');
-  console.log('🔥 CORS LIBERADO PARA FRONTEND!');
+  console.log('🔥 CORS MÁXIMO LIBERADO PARA TODOS OS DOMÍNIOS!');
+  console.log('📁 Caminho: /home/ubuntu/cotacao/whatsapp-standalone/');
   console.log('');
   
   // Inicializar WhatsApp
