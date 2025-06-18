@@ -5,6 +5,8 @@ import toast from 'react-hot-toast';
 interface WhatsAppStatus {
   isReady: boolean;
   hasQR: boolean;
+  timestamp?: string;
+  server?: string;
   user?: {
     name: string;
     number: string;
@@ -13,6 +15,9 @@ interface WhatsAppStatus {
 
 interface QRResponse {
   qr: string;
+  timestamp?: string;
+  length?: number;
+  folder?: string;
 }
 
 export const WhatsAppEmergency: React.FC = () => {
@@ -22,221 +27,153 @@ export const WhatsAppEmergency: React.FC = () => {
   const [user, setUser] = useState<any>(null);
   const [lastUpdate, setLastUpdate] = useState<string>('');
   const [attempts, setAttempts] = useState(0);
-  const [workingServer, setWorkingServer] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<any>({});
 
-  // 🔥 MÚLTIPLOS SERVIDORES PARA TESTAR
-  const POSSIBLE_SERVERS = [
-    'http://localhost:3001',
-    'http://127.0.0.1:3001',
-    'http://146.59.227.248:3001',
-    `http://${window.location.hostname}:3001`
-  ];
+  // 🔥 SERVIDOR CORRETO - EXATAMENTE COMO VOCÊ ESPECIFICOU
+  const SERVER_BASE = 'http://146.59.227.248:3001';
+  const API_BASE = `${SERVER_BASE}/api/whatsapp`;
 
-  // FUNÇÃO PRINCIPAL - BUSCAR QR CODE COM FALLBACK
+  // URLs EXATAS CONFORME VOCÊ ESPECIFICOU
+  const ENDPOINTS = {
+    status: `${API_BASE}/status`,
+    qr: `${API_BASE}/qr`,
+    chats: `${API_BASE}/chats`,
+    send: `${API_BASE}/send`,
+    restart: `${API_BASE}/restart`
+  };
+
+  // FUNÇÃO PRINCIPAL - BUSCAR QR CODE DO ENDPOINT CORRETO
   const fetchQRCodeFromStandalone = async () => {
     setLastUpdate(new Date().toLocaleTimeString());
     setAttempts(prev => prev + 1);
     
     console.log('🔥 CONECTANDO AO WHATSAPP-STANDALONE - TENTATIVA', attempts + 1);
+    console.log('🌐 Servidor Base:', SERVER_BASE);
+    console.log('📱 API Base:', API_BASE);
     
-    // Se já temos um servidor funcionando, usar ele primeiro
-    const serversToTry = workingServer 
-      ? [workingServer, ...POSSIBLE_SERVERS.filter(s => s !== workingServer)]
-      : POSSIBLE_SERVERS;
-    
-    for (const serverUrl of serversToTry) {
-      try {
-        console.log('🌐 Testando servidor:', serverUrl);
-        setServerStatus('connecting');
-        setDebugInfo(prev => ({ 
-          ...prev, 
-          lastAttempt: new Date().toLocaleTimeString(),
-          currentServer: serverUrl,
-          attemptNumber: attempts + 1
-        }));
-        
-        // 1. TESTAR CONECTIVIDADE BÁSICA PRIMEIRO
-        console.log('🌐 Testando conectividade básica...');
-        
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
-        
-        const basicTest = await fetch(serverUrl, {
-          method: 'GET',
-          mode: 'cors',
-          cache: 'no-cache',
-          credentials: 'omit',
-          headers: {
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'User-Agent': 'Mozilla/5.0 (compatible; WhatsApp-Frontend/1.0)'
-          },
-          signal: controller.signal
-        });
+    try {
+      setServerStatus('connecting');
+      setDebugInfo(prev => ({ 
+        ...prev, 
+        lastAttempt: new Date().toLocaleTimeString(),
+        serverBase: SERVER_BASE,
+        apiBase: API_BASE,
+        attemptNumber: attempts + 1
+      }));
+      
+      // 1. TESTAR STATUS PRIMEIRO
+      console.log('📊 Testando status em:', ENDPOINTS.status);
+      
+      const statusResponse = await fetch(ENDPOINTS.status, {
+        method: 'GET',
+        mode: 'cors',
+        cache: 'no-cache',
+        credentials: 'omit',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
 
-        clearTimeout(timeoutId);
+      console.log('📊 Status response:', statusResponse.status);
+      setDebugInfo(prev => ({ ...prev, statusResponse: statusResponse.status }));
 
-        console.log('🌐 Conectividade básica:', basicTest.status, 'para', serverUrl);
-        setDebugInfo(prev => ({ 
-          ...prev, 
-          basicConnectivity: basicTest.status,
-          workingServer: serverUrl
-        }));
+      if (statusResponse.ok) {
+        const statusData: WhatsAppStatus = await statusResponse.json();
+        console.log('✅ Status obtido do Standalone:', statusData);
+        setDebugInfo(prev => ({ ...prev, statusData }));
+        
+        setServerStatus('online');
+        setIsConnected(statusData.isReady);
+        
+        if (statusData.user) {
+          setUser(statusData.user);
+        }
 
-        if (basicTest.ok) {
-          console.log('✅ Servidor respondendo:', serverUrl);
-          setServerStatus('online');
-          setWorkingServer(serverUrl);
+        // 2. SE TEM QR DISPONÍVEL, BUSCAR
+        if (statusData.hasQR && !statusData.isReady) {
+          console.log('📱 QR Code disponível! Buscando em:', ENDPOINTS.qr);
           
-          // 2. TESTAR STATUS DO WHATSAPP
-          console.log('📊 Testando status do WhatsApp...');
-          
-          const statusController = new AbortController();
-          const statusTimeoutId = setTimeout(() => statusController.abort(), 8000);
-          
-          const statusResponse = await fetch(`${serverUrl}/api/whatsapp/status`, {
+          const qrResponse = await fetch(ENDPOINTS.qr, {
             method: 'GET',
             mode: 'cors',
             cache: 'no-cache',
             credentials: 'omit',
             headers: {
               'Accept': 'application/json',
-              'Content-Type': 'application/json',
-              'User-Agent': 'Mozilla/5.0 (compatible; WhatsApp-Frontend/1.0)'
-            },
-            signal: statusController.signal
+              'Content-Type': 'application/json'
+            }
           });
 
-          clearTimeout(statusTimeoutId);
+          console.log('📱 QR response:', qrResponse.status);
+          setDebugInfo(prev => ({ ...prev, qrResponse: qrResponse.status }));
 
-          console.log('📊 Status response:', statusResponse.status);
-          setDebugInfo(prev => ({ ...prev, statusResponse: statusResponse.status }));
-
-          if (statusResponse.ok) {
-            const statusData: WhatsAppStatus = await statusResponse.json();
-            console.log('✅ Status obtido:', statusData);
-            setDebugInfo(prev => ({ ...prev, statusData }));
-            
-            setIsConnected(statusData.isReady);
-            
-            if (statusData.user) {
-              setUser(statusData.user);
-            }
-
-            // 3. SE TEM QR DISPONÍVEL, BUSCAR
-            if (statusData.hasQR && !statusData.isReady) {
-              console.log('📱 QR Code disponível! Buscando...');
-              
-              const qrController = new AbortController();
-              const qrTimeoutId = setTimeout(() => qrController.abort(), 8000);
-              
-              const qrResponse = await fetch(`${serverUrl}/api/whatsapp/qr`, {
-                method: 'GET',
-                mode: 'cors',
-                cache: 'no-cache',
-                credentials: 'omit',
-                headers: {
-                  'Accept': 'application/json',
-                  'Content-Type': 'application/json',
-                  'User-Agent': 'Mozilla/5.0 (compatible; WhatsApp-Frontend/1.0)'
-                },
-                signal: qrController.signal
-              });
-
-              clearTimeout(qrTimeoutId);
-
-              console.log('📱 QR response:', qrResponse.status);
-              setDebugInfo(prev => ({ ...prev, qrResponse: qrResponse.status }));
-
-              if (qrResponse.ok) {
-                const qrData: QRResponse = await qrResponse.json();
-                console.log('🎉 QR CODE OBTIDO!');
-                setQrCode(qrData.qr);
-                setDebugInfo(prev => ({ ...prev, qrReceived: true, qrLength: qrData.qr?.length }));
-                toast.success(`QR Code carregado de ${serverUrl}!`);
-                return; // SUCESSO!
-              } else {
-                console.log('⏳ QR Code ainda não disponível (status:', qrResponse.status, ')');
-                setDebugInfo(prev => ({ ...prev, qrNotReady: qrResponse.status }));
-              }
-            } else if (statusData.isReady) {
-              console.log('✅ WhatsApp já conectado!');
-              setQrCode(null);
-              toast.success('WhatsApp já está conectado!');
-              return; // SUCESSO!
-            } else {
-              console.log('⏳ Aguardando QR Code ser gerado...');
-              setDebugInfo(prev => ({ ...prev, waitingForQR: true }));
-            }
-            
-            // Se chegou até aqui, o servidor está funcionando mas sem QR ainda
-            return;
+          if (qrResponse.ok) {
+            const qrData: QRResponse = await qrResponse.json();
+            console.log('🎉 QR CODE REAL OBTIDO DO STANDALONE!');
+            console.log('📏 Tamanho do QR:', qrData.qr?.length);
+            setQrCode(qrData.qr);
+            setDebugInfo(prev => ({ 
+              ...prev, 
+              qrReceived: true, 
+              qrLength: qrData.qr?.length,
+              qrTimestamp: qrData.timestamp,
+              qrFolder: qrData.folder
+            }));
+            toast.success('QR Code REAL carregado do servidor Standalone!');
+            return; // SUCESSO!
           } else {
-            console.log('❌ Status API não OK:', statusResponse.status, 'para', serverUrl);
-            setDebugInfo(prev => ({ ...prev, statusError: statusResponse.status }));
-            // Continuar tentando outros servidores
+            console.log('⏳ QR Code ainda não disponível (status:', qrResponse.status, ')');
+            setDebugInfo(prev => ({ ...prev, qrNotReady: qrResponse.status }));
           }
+        } else if (statusData.isReady) {
+          console.log('✅ WhatsApp já conectado no Standalone!');
+          setQrCode(null);
+          toast.success('WhatsApp já está conectado!');
+          return; // SUCESSO!
         } else {
-          console.log('❌ Servidor não respondeu:', basicTest.status, 'para', serverUrl);
-          setDebugInfo(prev => ({ ...prev, serverNotResponding: basicTest.status }));
-          // Continuar tentando outros servidores
+          console.log('⏳ Aguardando QR Code ser gerado...');
+          setDebugInfo(prev => ({ ...prev, waitingForQR: true }));
         }
-        
-      } catch (error) {
-        console.error('❌ Erro ao conectar com', serverUrl, ':', error);
-        setDebugInfo(prev => ({ 
-          ...prev, 
-          [`error_${serverUrl}`]: error.toString(),
-          lastError: error.toString()
-        }));
-        
-        // Se foi erro de rede/timeout, continuar tentando outros servidores
-        if (error.name === 'AbortError' || error.message.includes('fetch')) {
-          console.log('⏳ Tentando próximo servidor...');
-          continue;
-        }
+      } else {
+        console.log('❌ Status não OK:', statusResponse.status);
+        setDebugInfo(prev => ({ ...prev, statusError: statusResponse.status }));
+        throw new Error(`Status API retornou: ${statusResponse.status}`);
       }
+      
+    } catch (error) {
+      console.error('❌ Erro ao conectar com Standalone:', error);
+      setServerStatus('offline');
+      setDebugInfo(prev => ({ 
+        ...prev, 
+        error: error.toString(),
+        lastError: error.message
+      }));
+      toast.error('Erro ao conectar: ' + error.message);
     }
-    
-    // Se chegou aqui, nenhum servidor funcionou
-    console.error('❌ Nenhum servidor WhatsApp encontrado!');
-    setServerStatus('offline');
-    setWorkingServer(null);
-    toast.error('Nenhum servidor WhatsApp encontrado. Verifique se o servidor está rodando.');
   };
 
-  // REINICIAR WHATSAPP
+  // REINICIAR WHATSAPP NO STANDALONE
   const restartWhatsApp = async () => {
-    if (!workingServer) {
-      toast.error('Nenhum servidor conectado para reiniciar');
-      return;
-    }
-
     try {
-      console.log('🔄 Reiniciando WhatsApp em:', workingServer);
+      console.log('🔄 Reiniciando WhatsApp no Standalone...');
+      console.log('🔄 Endpoint restart:', ENDPOINTS.restart);
       
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-      
-      const response = await fetch(`${workingServer}/api/whatsapp/restart`, {
+      const response = await fetch(ENDPOINTS.restart, {
         method: 'POST',
         mode: 'cors',
         cache: 'no-cache',
         credentials: 'omit',
         headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (compatible; WhatsApp-Frontend/1.0)'
-        },
-        signal: controller.signal
+          'Content-Type': 'application/json'
+        }
       });
-
-      clearTimeout(timeoutId);
 
       if (response.ok) {
         setIsConnected(false);
         setQrCode(null);
         setUser(null);
-        toast.success('WhatsApp reiniciado!');
+        toast.success('WhatsApp reiniciado no Standalone!');
         
         // Buscar QR Code após reiniciar
         setTimeout(() => {
@@ -250,7 +187,7 @@ export const WhatsAppEmergency: React.FC = () => {
     }
   };
 
-  // POLLING AUTOMÁTICO A CADA 5 SEGUNDOS
+  // POLLING AUTOMÁTICO A CADA 3 SEGUNDOS
   useEffect(() => {
     fetchQRCodeFromStandalone();
     
@@ -258,7 +195,7 @@ export const WhatsAppEmergency: React.FC = () => {
       if (!isConnected) {
         fetchQRCodeFromStandalone();
       }
-    }, 5000);
+    }, 3000);
 
     return () => clearInterval(interval);
   }, [isConnected]);
@@ -292,7 +229,7 @@ export const WhatsAppEmergency: React.FC = () => {
                   WhatsApp STANDALONE - Apresentação Cliente
                 </h1>
                 <p className="text-gray-600">
-                  {workingServer ? `Conectado: ${workingServer}` : 'Procurando servidor...'}
+                  Conectando ao servidor: {SERVER_BASE}
                 </p>
                 <div className="flex items-center space-x-2 mt-1">
                   <span className="text-xs text-gray-500">Última atualização:</span>
@@ -302,8 +239,8 @@ export const WhatsAppEmergency: React.FC = () => {
                   </span>
                 </div>
                 <div className="flex items-center space-x-2 mt-1">
-                  <span className="text-xs text-gray-500">Servidores testados:</span>
-                  <code className="text-xs bg-gray-100 px-2 py-1 rounded">{POSSIBLE_SERVERS.length} opções</code>
+                  <span className="text-xs text-gray-500">API Base:</span>
+                  <code className="text-xs bg-green-100 px-2 py-1 rounded">{API_BASE}</code>
                 </div>
               </div>
             </div>
@@ -324,8 +261,7 @@ export const WhatsAppEmergency: React.FC = () => {
               
               <button
                 onClick={restartWhatsApp}
-                disabled={!workingServer}
-                className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
               >
                 <Zap className="w-4 h-4" />
                 <span>Reiniciar</span>
@@ -336,36 +272,42 @@ export const WhatsAppEmergency: React.FC = () => {
 
         {/* DEBUG INFO DETALHADO */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <h3 className="font-medium text-gray-900 mb-3">🔍 Debug Info Detalhado (Tempo Real)</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <h3 className="font-medium text-gray-900 mb-3">🔍 Debug Info - URLs Corretas</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="font-medium">Servidor Base:</span>
+              <p className="text-gray-600 font-mono text-xs">{SERVER_BASE}</p>
+            </div>
+            <div>
+              <span className="font-medium">API Base:</span>
+              <p className="text-gray-600 font-mono text-xs">{API_BASE}</p>
+            </div>
+            <div>
+              <span className="font-medium">Status API:</span>
+              <p className="text-gray-600 font-mono text-xs">{ENDPOINTS.status}</p>
+            </div>
+            <div>
+              <span className="font-medium">QR API:</span>
+              <p className="text-gray-600 font-mono text-xs">{ENDPOINTS.qr}</p>
+            </div>
+          </div>
+          
+          <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
             <div>
               <span className="font-medium">Última tentativa:</span>
               <p className="text-gray-600">{debugInfo.lastAttempt || 'Nunca'}</p>
             </div>
             <div>
-              <span className="font-medium">Servidor atual:</span>
-              <p className="text-gray-600 text-xs">{debugInfo.currentServer || 'Nenhum'}</p>
-            </div>
-            <div>
-              <span className="font-medium">Conectividade:</span>
-              <p className="text-gray-600">{debugInfo.basicConnectivity || 'N/A'}</p>
-            </div>
-            <div>
-              <span className="font-medium">Status API:</span>
+              <span className="font-medium">Status Response:</span>
               <p className="text-gray-600">{debugInfo.statusResponse || 'N/A'}</p>
             </div>
-          </div>
-          
-          {/* LISTA DE SERVIDORES TESTADOS */}
-          <div className="mt-4">
-            <h4 className="font-medium text-gray-900 mb-2">🌐 Servidores Testados:</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-              {POSSIBLE_SERVERS.map((server, index) => (
-                <div key={index} className={`p-2 rounded ${server === workingServer ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
-                  <span className="font-mono">{server}</span>
-                  {server === workingServer && <span className="ml-2 text-green-600">✅ Ativo</span>}
-                </div>
-              ))}
+            <div>
+              <span className="font-medium">QR Response:</span>
+              <p className="text-gray-600">{debugInfo.qrResponse || 'N/A'}</p>
+            </div>
+            <div>
+              <span className="font-medium">QR Length:</span>
+              <p className="text-gray-600">{debugInfo.qrLength || 'N/A'}</p>
             </div>
           </div>
           
@@ -382,14 +324,17 @@ export const WhatsAppEmergency: React.FC = () => {
         </div>
 
         {/* STATUS DO SERVIDOR */}
-        {workingServer && (
+        {serverStatus === 'online' && (
           <div className="bg-green-50 border border-green-200 rounded-lg p-4">
             <div className="flex items-center space-x-2">
               <CheckCircle className="w-5 h-5 text-green-600" />
               <p className="text-green-800 font-medium">✅ Conectado ao WhatsApp Standalone!</p>
             </div>
             <p className="text-green-700 text-sm mt-1">
-              Servidor: <code className="bg-green-100 px-2 py-1 rounded">{workingServer}</code>
+              Servidor: <code className="bg-green-100 px-2 py-1 rounded">{SERVER_BASE}</code>
+            </p>
+            <p className="text-green-700 text-sm">
+              API: <code className="bg-green-100 px-2 py-1 rounded">{API_BASE}</code>
             </p>
           </div>
         )}
@@ -410,13 +355,16 @@ export const WhatsAppEmergency: React.FC = () => {
               </button>
             </div>
             <div className="mt-2 text-sm text-red-700">
-              <p className="font-medium">💡 Verifique se algum destes comandos está rodando:</p>
-              <div className="mt-2 space-y-1">
-                <code className="bg-red-100 px-2 py-1 rounded text-xs block">cd whatsapp-standalone && npm start</code>
-                <code className="bg-red-100 px-2 py-1 rounded text-xs block">cd /home/ubuntu/cotacao/whatsapp-standalone && npm start</code>
-                <code className="bg-red-100 px-2 py-1 rounded text-xs block">node server.js (na pasta do projeto)</code>
+              <p className="font-medium">💡 Verifique se o comando está rodando no servidor:</p>
+              <code className="bg-red-100 px-2 py-1 rounded text-xs block mt-1">cd /home/ubuntu/cotacao/whatsapp-standalone && npm start</code>
+              <div className="mt-2">
+                <p className="font-medium">🌐 URLs testadas:</p>
+                <ul className="text-xs space-y-1 mt-1">
+                  <li>• Status: {ENDPOINTS.status}</li>
+                  <li>• QR Code: {ENDPOINTS.qr}</li>
+                  <li>• Chats: {ENDPOINTS.chats}</li>
+                </ul>
               </div>
-              <p className="mt-2 text-xs">Servidores testados: {POSSIBLE_SERVERS.join(', ')}</p>
             </div>
           </div>
         )}
@@ -435,7 +383,7 @@ export const WhatsAppEmergency: React.FC = () => {
                   <div className="p-6 bg-white border-4 border-green-300 rounded-2xl shadow-lg">
                     <img 
                       src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrCode)}`}
-                      alt="QR Code WhatsApp REAL" 
+                      alt="QR Code WhatsApp REAL do Standalone" 
                       className="w-72 h-72"
                       onError={(e) => {
                         console.error('Erro ao carregar QR Code como imagem');
@@ -489,9 +437,10 @@ export const WhatsAppEmergency: React.FC = () => {
                 </div>
                 
                 <div className="text-sm text-gray-600 space-y-1">
-                  <p>🔄 Atualizando automaticamente a cada 5 segundos</p>
+                  <p>🔄 Atualizando automaticamente a cada 3 segundos</p>
                   <p>🔒 Conexão segura e criptografada</p>
-                  <p>⚡ QR Code REAL do servidor: {workingServer}</p>
+                  <p>⚡ QR Code REAL do servidor Standalone</p>
+                  <p>📡 API: {ENDPOINTS.qr}</p>
                 </div>
               </div>
             ) : isConnected ? (
@@ -519,8 +468,7 @@ export const WhatsAppEmergency: React.FC = () => {
                 <div>
                   <h3 className="text-xl font-bold text-gray-900">Preparando WhatsApp REAL...</h3>
                   <p className="text-gray-600">
-                    {serverStatus === 'connecting' ? 'Conectando ao servidor...' : 
-                     serverStatus === 'offline' ? 'Procurando servidor ativo...' :
+                    {serverStatus === 'connecting' ? 'Conectando ao servidor Standalone...' : 
                      'Aguardando QR Code do servidor...'}
                   </p>
                 </div>
@@ -537,8 +485,7 @@ export const WhatsAppEmergency: React.FC = () => {
                   
                   <button
                     onClick={restartWhatsApp}
-                    disabled={!workingServer}
-                    className="flex items-center space-x-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center space-x-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                   >
                     <Zap className="w-5 h-5" />
                     <span>Reiniciar WhatsApp</span>
@@ -547,20 +494,12 @@ export const WhatsAppEmergency: React.FC = () => {
                 
                 {serverStatus === 'offline' && (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <p className="text-red-800 text-sm font-medium mb-2">
-                      ⚠️ Para a apresentação funcionar, execute um destes comandos no servidor:
+                    <p className="text-red-800 text-sm">
+                      ⚠️ Para a apresentação funcionar, execute no servidor:
                     </p>
-                    <div className="space-y-1">
-                      <code className="bg-red-100 text-red-800 px-3 py-2 rounded text-sm block">
-                        cd whatsapp-standalone && npm start
-                      </code>
-                      <code className="bg-red-100 text-red-800 px-3 py-2 rounded text-sm block">
-                        node whatsapp-standalone/server.js
-                      </code>
-                    </div>
-                    <p className="text-red-700 text-xs mt-2">
-                      O sistema testará automaticamente: localhost:3001, 127.0.0.1:3001, 146.59.227.248:3001
-                    </p>
+                    <code className="bg-red-100 text-red-800 px-3 py-2 rounded text-sm block mt-2">
+                      cd /home/ubuntu/cotacao/whatsapp-standalone && npm start
+                    </code>
                   </div>
                 )}
               </div>
@@ -597,10 +536,16 @@ export const WhatsAppEmergency: React.FC = () => {
           </div>
           <div className="mt-4 p-3 bg-blue-100 rounded">
             <p className="text-blue-800 text-sm">
-              <strong>Servidor ativo:</strong> {workingServer || 'Nenhum encontrado'}
+              <strong>🌐 Servidor:</strong> {SERVER_BASE}
             </p>
             <p className="text-blue-800 text-sm">
-              <strong>Comando para iniciar:</strong> cd whatsapp-standalone && npm start
+              <strong>📱 API WhatsApp:</strong> {API_BASE}
+            </p>
+            <p className="text-blue-800 text-sm">
+              <strong>📋 Status:</strong> {ENDPOINTS.status}
+            </p>
+            <p className="text-blue-800 text-sm">
+              <strong>🔲 QR Code:</strong> {ENDPOINTS.qr}
             </p>
           </div>
         </div>
