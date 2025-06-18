@@ -40,8 +40,12 @@ interface WhatsAppUser {
   number: string;
 }
 
-// Conectar diretamente no servidor onde o WhatsApp está rodando
-const SERVER_URL = 'http://146.59.227.248:3001';
+// Múltiplas URLs para tentar conectar
+const SERVER_URLS = [
+  'http://146.59.227.248:3001',
+  'http://localhost:3001',
+  'http://127.0.0.1:3001'
+];
 
 export const WhatsAppIntegrated: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'connect' | 'dashboard' | 'messages'>('connect');
@@ -56,33 +60,47 @@ export const WhatsAppIntegrated: React.FC = () => {
   const [user, setUser] = useState<WhatsAppUser | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [currentServerUrl, setCurrentServerUrl] = useState<string>('');
   const [lastQrFetch, setLastQrFetch] = useState<number>(0);
 
-  // Função para testar conectividade básica
-  const testServerConnectivity = async (): Promise<boolean> => {
-    try {
-      console.log('🔍 Testando conectividade básica com:', SERVER_URL);
-      const response = await fetch(SERVER_URL, { 
-        method: 'GET',
-        mode: 'cors',
-        cache: 'no-cache'
-      });
-      console.log('📡 Resposta do servidor:', response.status);
-      return response.ok;
-    } catch (error) {
-      console.error('❌ Erro de conectividade:', error);
-      return false;
+  // Função para testar conectividade com múltiplas URLs
+  const findWorkingServer = async (): Promise<string | null> => {
+    console.log('🔍 Procurando servidor WhatsApp disponível...');
+    
+    for (const url of SERVER_URLS) {
+      try {
+        console.log(`🔌 Testando: ${url}`);
+        const response = await fetch(url, { 
+          method: 'GET',
+          mode: 'no-cors', // Permite testar mesmo com CORS
+          cache: 'no-cache'
+        });
+        
+        // Para no-cors, se não der erro, assume que está funcionando
+        console.log(`✅ Servidor encontrado: ${url}`);
+        return url;
+      } catch (error) {
+        console.log(`❌ Falhou: ${url} - ${error}`);
+      }
     }
+    
+    // Se todos falharam, tenta o primeiro mesmo assim
+    console.log('⚠️ Nenhum servidor respondeu, usando o primeiro da lista');
+    return SERVER_URLS[0];
   };
 
   // Função para buscar QR Code via API REST
-  const fetchQRCodeAPI = async (): Promise<string | null> => {
+  const fetchQRCodeAPI = async (serverUrl: string): Promise<string | null> => {
     try {
       console.log('🔍 Buscando QR Code via API...');
-      const response = await fetch(`${SERVER_URL}/api/whatsapp/qr`, {
+      const response = await fetch(`${serverUrl}/api/whatsapp/qr`, {
         method: 'GET',
         mode: 'cors',
-        cache: 'no-cache'
+        cache: 'no-cache',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
       });
       
       if (response.ok) {
@@ -103,13 +121,17 @@ export const WhatsAppIntegrated: React.FC = () => {
   };
 
   // Função para buscar status via API REST
-  const fetchStatusAPI = async (): Promise<any> => {
+  const fetchStatusAPI = async (serverUrl: string): Promise<any> => {
     try {
       console.log('🔍 Buscando status via API...');
-      const response = await fetch(`${SERVER_URL}/api/whatsapp/status`, {
+      const response = await fetch(`${serverUrl}/api/whatsapp/status`, {
         method: 'GET',
         mode: 'cors',
-        cache: 'no-cache'
+        cache: 'no-cache',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
       });
       
       if (response.ok) {
@@ -124,35 +146,36 @@ export const WhatsAppIntegrated: React.FC = () => {
   };
 
   // Conectar via Socket.IO
-  const connectSocket = () => {
-    console.log('🔌 Tentando conectar Socket.IO...');
+  const connectSocket = (serverUrl: string) => {
+    console.log('🔌 Tentando conectar Socket.IO em:', serverUrl);
     
-    const newSocket = io(SERVER_URL, {
-      timeout: 5000,
+    const newSocket = io(serverUrl, {
+      timeout: 10000,
       forceNew: true,
-      transports: ['websocket', 'polling']
+      transports: ['websocket', 'polling'],
+      autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: 3,
+      reconnectionDelay: 1000
     });
     
     setSocket(newSocket);
 
     newSocket.on('connect', () => {
       console.log('✅ Socket.IO conectado!');
-      setServerStatus('online');
-      setConnectionError(null);
-      setRetryCount(0);
       toast.success('Socket.IO conectado!');
     });
 
     newSocket.on('connect_error', (error) => {
       console.error('❌ Erro Socket.IO:', error);
-      newSocket.disconnect();
-      setSocket(null);
+      // Não desconecta aqui, deixa tentar reconectar
     });
 
     newSocket.on('qr', (qr: string) => {
       console.log('📱 QR Code via Socket.IO!');
       setQrCode(qr);
       setIsConnected(false);
+      setLastQrFetch(Date.now());
     });
 
     newSocket.on('ready', (data: any) => {
@@ -173,14 +196,15 @@ export const WhatsAppIntegrated: React.FC = () => {
       setChats(chatList);
     });
 
-    // Timeout para Socket.IO
-    setTimeout(() => {
-      if (newSocket && !newSocket.connected) {
-        console.log('⏰ Timeout Socket.IO, usando apenas API REST');
-        newSocket.disconnect();
-        setSocket(null);
+    newSocket.on('status', (status: any) => {
+      console.log('📊 Status via Socket.IO:', status);
+      setIsConnected(status.isReady);
+      if (status.user) {
+        setUser(status.user);
       }
-    }, 5000);
+    });
+
+    return newSocket;
   };
 
   // Função principal de inicialização
@@ -190,33 +214,40 @@ export const WhatsAppIntegrated: React.FC = () => {
     
     console.log('🚀 Iniciando conexão com WhatsApp...');
     
-    // 1. Testar conectividade básica
-    const isServerOnline = await testServerConnectivity();
+    // 1. Encontrar servidor funcionando
+    const workingServer = await findWorkingServer();
     
-    if (!isServerOnline) {
+    if (!workingServer) {
       setServerStatus('offline');
-      setConnectionError('Servidor não está respondendo. Verifique se o comando "npm run whatsapp-server" está rodando.');
+      setConnectionError('Nenhum servidor WhatsApp encontrado. Verifique se o comando "npm run whatsapp-server" está rodando.');
       return;
     }
     
-    console.log('✅ Servidor está online!');
+    console.log('✅ Usando servidor:', workingServer);
+    setCurrentServerUrl(workingServer);
     setServerStatus('online');
     
     // 2. Tentar Socket.IO (não bloqueante)
-    connectSocket();
+    const socketConnection = connectSocket(workingServer);
     
     // 3. Buscar status inicial via API
-    const status = await fetchStatusAPI();
+    const status = await fetchStatusAPI(workingServer);
     if (status) {
       setIsConnected(status.isReady);
       if (status.user) {
         setUser(status.user);
       }
-    }
-    
-    // 4. Buscar QR Code se necessário
-    if (!status?.isReady) {
-      const qr = await fetchQRCodeAPI();
+      if (status.hasQR && !status.isReady) {
+        // Buscar QR Code se disponível
+        const qr = await fetchQRCodeAPI(workingServer);
+        if (qr) {
+          setQrCode(qr);
+          setLastQrFetch(Date.now());
+        }
+      }
+    } else {
+      // Se API não responder, tenta buscar QR Code mesmo assim
+      const qr = await fetchQRCodeAPI(workingServer);
       if (qr) {
         setQrCode(qr);
         setLastQrFetch(Date.now());
@@ -224,21 +255,16 @@ export const WhatsAppIntegrated: React.FC = () => {
     }
   };
 
-  // Polling para QR Code (fallback se Socket.IO não funcionar)
+  // Polling para QR Code e status
   useEffect(() => {
-    if (serverStatus === 'online' && !isConnected && !socket?.connected) {
+    if (currentServerUrl && serverStatus === 'online' && !isConnected) {
       const interval = setInterval(async () => {
         const now = Date.now();
-        if (now - lastQrFetch > 10000) { // A cada 10 segundos
-          console.log('🔄 Polling QR Code...');
-          const qr = await fetchQRCodeAPI();
-          if (qr) {
-            setQrCode(qr);
-            setLastQrFetch(now);
-          }
+        if (now - lastQrFetch > 5000) { // A cada 5 segundos
+          console.log('🔄 Polling QR Code e status...');
           
-          // Verificar status também
-          const status = await fetchStatusAPI();
+          // Verificar status primeiro
+          const status = await fetchStatusAPI(currentServerUrl);
           if (status?.isReady) {
             setIsConnected(true);
             setQrCode(null);
@@ -246,13 +272,21 @@ export const WhatsAppIntegrated: React.FC = () => {
               setUser(status.user);
               toast.success(`WhatsApp conectado como ${status.user.name}!`);
             }
+            return; // Para o polling se conectou
+          }
+          
+          // Se não conectado, buscar QR Code
+          const qr = await fetchQRCodeAPI(currentServerUrl);
+          if (qr) {
+            setQrCode(qr);
+            setLastQrFetch(now);
           }
         }
-      }, 5000);
+      }, 3000); // Polling a cada 3 segundos
 
       return () => clearInterval(interval);
     }
-  }, [serverStatus, isConnected, socket?.connected, lastQrFetch]);
+  }, [currentServerUrl, serverStatus, isConnected, lastQrFetch]);
 
   // Inicializar conexão ao montar componente
   useEffect(() => {
@@ -268,40 +302,68 @@ export const WhatsAppIntegrated: React.FC = () => {
   const retryConnection = () => {
     setRetryCount(prev => prev + 1);
     console.log(`🔄 Tentativa de reconexão #${retryCount + 1}`);
+    setQrCode(null);
+    setIsConnected(false);
+    setUser(null);
+    setCurrentServerUrl('');
     initializeConnection();
   };
 
   const loadChats = async () => {
+    if (!currentServerUrl) return;
+    
     try {
-      const response = await fetch(`${SERVER_URL}/api/whatsapp/chats`);
+      const response = await fetch(`${currentServerUrl}/api/whatsapp/chats`, {
+        method: 'GET',
+        mode: 'cors',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
       if (response.ok) {
         const data = await response.json();
         setChats(data);
+        toast.success(`${data.length} conversas carregadas`);
       }
     } catch (error) {
       console.error('Erro ao carregar chats:', error);
+      toast.error('Erro ao carregar chats');
     }
   };
 
   const loadChatMessages = async (chatId: string) => {
+    if (!currentServerUrl) return;
+    
     try {
-      const response = await fetch(`${SERVER_URL}/api/whatsapp/messages/${chatId}`);
+      const response = await fetch(`${currentServerUrl}/api/whatsapp/messages/${chatId}`, {
+        method: 'GET',
+        mode: 'cors',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
       if (response.ok) {
         const data = await response.json();
         setMessages(data);
+        toast.success(`${data.length} mensagens carregadas`);
       }
     } catch (error) {
       console.error('Erro ao carregar mensagens:', error);
+      toast.error('Erro ao carregar mensagens');
     }
   };
 
   const sendMessage = async () => {
-    if (!selectedChat || !messageText.trim()) return;
+    if (!selectedChat || !messageText.trim() || !currentServerUrl) return;
 
     try {
-      const response = await fetch(`${SERVER_URL}/api/whatsapp/send`, {
+      const response = await fetch(`${currentServerUrl}/api/whatsapp/send`, {
         method: 'POST',
+        mode: 'cors',
         headers: {
+          'Accept': 'application/json',
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -323,10 +385,14 @@ export const WhatsAppIntegrated: React.FC = () => {
   };
 
   const restartWhatsApp = async () => {
+    if (!currentServerUrl) return;
+    
     try {
-      const response = await fetch(`${SERVER_URL}/api/whatsapp/restart`, {
+      const response = await fetch(`${currentServerUrl}/api/whatsapp/restart`, {
         method: 'POST',
+        mode: 'cors',
         headers: {
+          'Accept': 'application/json',
           'Content-Type': 'application/json'
         }
       });
@@ -391,7 +457,9 @@ export const WhatsAppIntegrated: React.FC = () => {
               </p>
               <div className="flex items-center space-x-2 mt-1">
                 <span className="text-xs text-gray-500">Servidor:</span>
-                <code className="text-xs bg-blue-100 px-2 py-1 rounded">{SERVER_URL}</code>
+                <code className="text-xs bg-blue-100 px-2 py-1 rounded">
+                  {currentServerUrl || 'Procurando...'}
+                </code>
                 {socket?.connected && (
                   <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Socket.IO ✓</span>
                 )}
@@ -432,6 +500,14 @@ export const WhatsAppIntegrated: React.FC = () => {
             </button>
           </div>
           <p className="text-red-700 text-sm mt-1">{connectionError}</p>
+          <div className="mt-2 text-xs text-red-600">
+            <p>Servidores testados:</p>
+            <ul className="list-disc list-inside ml-2">
+              {SERVER_URLS.map(url => (
+                <li key={url}>{url}</li>
+              ))}
+            </ul>
+          </div>
         </div>
       )}
 
@@ -443,7 +519,7 @@ export const WhatsAppIntegrated: React.FC = () => {
             <p className="text-green-800 font-medium">✅ Conectado ao servidor WhatsApp Real!</p>
           </div>
           <p className="text-green-700 text-sm mt-1">
-            Servidor: {SERVER_URL} | 
+            Servidor: {currentServerUrl} | 
             Socket.IO: {socket?.connected ? '✅ Conectado' : '❌ Usando API REST'} |
             Tentativas: {retryCount}
           </p>
@@ -488,18 +564,28 @@ export const WhatsAppIntegrated: React.FC = () => {
                 <h4 className="font-medium text-gray-900 mb-2">🔍 Status da Conexão:</h4>
                 <div className="text-sm text-gray-600 space-y-1">
                   <p><strong>Servidor:</strong> {serverStatus}</p>
+                  <p><strong>URL Ativa:</strong> {currentServerUrl || 'Nenhuma'}</p>
                   <p><strong>Socket.IO:</strong> {socket?.connected ? 'Conectado' : 'Desconectado'}</p>
                   <p><strong>WhatsApp:</strong> {isConnected ? 'Conectado' : 'Desconectado'}</p>
                   <p><strong>QR Code:</strong> {qrCode ? 'Disponível' : 'Não disponível'}</p>
                   <p><strong>Tentativas:</strong> {retryCount}</p>
                   <p><strong>Último QR:</strong> {lastQrFetch ? new Date(lastQrFetch).toLocaleTimeString() : 'Nunca'}</p>
                 </div>
-                <button
-                  onClick={retryConnection}
-                  className="mt-2 px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-                >
-                  🔄 Forçar Reconexão
-                </button>
+                <div className="flex space-x-2 mt-2">
+                  <button
+                    onClick={retryConnection}
+                    className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                  >
+                    🔄 Forçar Reconexão
+                  </button>
+                  <button
+                    onClick={() => fetchQRCodeAPI(currentServerUrl)}
+                    className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                    disabled={!currentServerUrl}
+                  >
+                    📱 Buscar QR Code
+                  </button>
+                </div>
               </div>
               
               {qrCode ? (
@@ -524,9 +610,9 @@ export const WhatsAppIntegrated: React.FC = () => {
                     </ol>
                   </div>
                   <div className="text-sm text-gray-600">
-                    <p>⚡ QR Code do servidor real: {SERVER_URL}</p>
+                    <p>⚡ QR Code do servidor real: {currentServerUrl}</p>
                     <p>🔒 Conexão segura e criptografada</p>
-                    <p>🔄 Atualização automática a cada 10 segundos</p>
+                    <p>🔄 Atualização automática a cada 5 segundos</p>
                   </div>
                 </div>
               ) : isConnected ? (
@@ -553,7 +639,7 @@ export const WhatsAppIntegrated: React.FC = () => {
                   <div>
                     <h4 className="text-lg font-medium text-gray-900">Aguardando Conexão</h4>
                     <p className="text-gray-600">
-                      {serverStatus === 'connecting' ? 'Conectando ao servidor...' : 
+                      {serverStatus === 'connecting' ? 'Procurando servidor...' : 
                        serverStatus === 'offline' ? 'Servidor offline' :
                        'Aguardando QR Code do servidor...'}
                     </p>
@@ -561,7 +647,7 @@ export const WhatsAppIntegrated: React.FC = () => {
                   {serverStatus === 'offline' && (
                     <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                       <p className="text-red-800 text-sm">
-                        ⚠️ Servidor offline. Verifique se o comando `npm run whatsapp-server` está rodando no servidor.
+                        ⚠️ Servidor offline. Verifique se o comando `npm run whatsapp-server` está rodando.
                       </p>
                     </div>
                   )}
