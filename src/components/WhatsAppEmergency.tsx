@@ -24,29 +24,30 @@ export const WhatsAppEmergency: React.FC = () => {
   const [attempts, setAttempts] = useState(0);
   const [workingServer, setWorkingServer] = useState<string | null>(null);
 
-  // 🔥 SERVIDOR REAL - EXATAMENTE COMO ESTÁ RODANDO
-  const REAL_SERVER = 'http://146.59.227.248:3001';
+  // 🔥 SERVIDOR STANDALONE - EXATO COMO VOCÊ ESTÁ RODANDO
+  const STANDALONE_SERVER = 'http://146.59.227.248:3001';
 
-  // FUNÇÃO PRINCIPAL - BUSCAR QR CODE REAL DO WHATSAPP-STANDALONE
-  const fetchQRCodeDirect = async () => {
+  // FUNÇÃO PRINCIPAL - BUSCAR QR CODE DO STANDALONE
+  const fetchQRCodeFromStandalone = async () => {
     setLastUpdate(new Date().toLocaleTimeString());
     setAttempts(prev => prev + 1);
     
     console.log('🔥 CONECTANDO AO WHATSAPP-STANDALONE - TENTATIVA', attempts + 1);
-    console.log('🌐 Servidor:', REAL_SERVER);
+    console.log('🌐 Servidor Standalone:', STANDALONE_SERVER);
     
     try {
       setServerStatus('connecting');
       
-      // 1. TESTAR STATUS PRIMEIRO - SEM CORS
+      // 1. TESTAR STATUS DO STANDALONE
       console.log('📊 Testando status do WhatsApp Standalone...');
       
-      const statusResponse = await fetch(`${REAL_SERVER}/api/whatsapp/status`, {
+      const statusResponse = await fetch(`${STANDALONE_SERVER}/api/whatsapp/status`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json'
-        }
+        },
+        mode: 'cors'
       });
 
       console.log('📊 Status response:', statusResponse.status);
@@ -56,7 +57,7 @@ export const WhatsAppEmergency: React.FC = () => {
         console.log('✅ Status obtido do Standalone:', statusData);
         
         setServerStatus('online');
-        setWorkingServer(REAL_SERVER);
+        setWorkingServer(STANDALONE_SERVER);
         setIsConnected(statusData.isReady);
         
         if (statusData.user) {
@@ -67,19 +68,20 @@ export const WhatsAppEmergency: React.FC = () => {
         if (statusData.hasQR && !statusData.isReady) {
           console.log('📱 QR Code disponível no Standalone! Buscando...');
           
-          const qrResponse = await fetch(`${REAL_SERVER}/api/whatsapp/qr`, {
+          const qrResponse = await fetch(`${STANDALONE_SERVER}/api/whatsapp/qr`, {
             method: 'GET',
             headers: {
               'Accept': 'application/json',
               'Content-Type': 'application/json'
-            }
+            },
+            mode: 'cors'
           });
 
           if (qrResponse.ok) {
             const qrData: QRResponse = await qrResponse.json();
             console.log('🎉 QR CODE REAL OBTIDO DO STANDALONE!');
             setQrCode(qrData.qr);
-            toast.success('QR Code REAL carregado do servidor Standalone!');
+            toast.success('QR Code REAL carregado do Standalone!');
             return; // SUCESSO!
           } else {
             console.log('⏳ QR Code ainda não disponível (status:', qrResponse.status, ')');
@@ -109,11 +111,12 @@ export const WhatsAppEmergency: React.FC = () => {
     try {
       console.log('🔄 Reiniciando WhatsApp no Standalone...');
       
-      const response = await fetch(`${REAL_SERVER}/api/whatsapp/restart`, {
+      const response = await fetch(`${STANDALONE_SERVER}/api/whatsapp/restart`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
-        }
+        },
+        mode: 'cors'
       });
 
       if (response.ok) {
@@ -124,7 +127,7 @@ export const WhatsAppEmergency: React.FC = () => {
         
         // Buscar QR Code após reiniciar
         setTimeout(() => {
-          fetchQRCodeDirect();
+          fetchQRCodeFromStandalone();
         }, 3000);
       } else {
         throw new Error(`Restart falhou: ${response.status}`);
@@ -136,11 +139,11 @@ export const WhatsAppEmergency: React.FC = () => {
 
   // POLLING AUTOMÁTICO A CADA 3 SEGUNDOS
   useEffect(() => {
-    fetchQRCodeDirect();
+    fetchQRCodeFromStandalone();
     
     const interval = setInterval(() => {
       if (!isConnected) {
-        fetchQRCodeDirect();
+        fetchQRCodeFromStandalone();
       }
     }, 3000);
 
@@ -176,7 +179,7 @@ export const WhatsAppEmergency: React.FC = () => {
                   WhatsApp STANDALONE - Apresentação Cliente
                 </h1>
                 <p className="text-gray-600">
-                  Conectando ao servidor Standalone: {REAL_SERVER}
+                  Conectando ao servidor Standalone: {STANDALONE_SERVER}
                 </p>
                 <div className="flex items-center space-x-2 mt-1">
                   <span className="text-xs text-gray-500">Última atualização:</span>
@@ -195,7 +198,7 @@ export const WhatsAppEmergency: React.FC = () => {
               </div>
               
               <button
-                onClick={fetchQRCodeDirect}
+                onClick={fetchQRCodeFromStandalone}
                 className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 <RefreshCw className="w-4 h-4" />
@@ -235,14 +238,14 @@ export const WhatsAppEmergency: React.FC = () => {
                 <p className="text-red-800 font-medium">⚠️ Não foi possível conectar ao WhatsApp Standalone</p>
               </div>
               <button
-                onClick={fetchQRCodeDirect}
+                onClick={fetchQRCodeFromStandalone}
                 className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
               >
                 Tentar Novamente
               </button>
             </div>
             <div className="mt-2 text-sm text-red-700">
-              <p>Servidor testado: <code className="bg-red-100 px-2 py-1 rounded">{REAL_SERVER}</code></p>
+              <p>Servidor testado: <code className="bg-red-100 px-2 py-1 rounded">{STANDALONE_SERVER}</code></p>
               <p className="mt-2 font-medium">💡 Verifique se o comando está rodando no servidor:</p>
               <code className="bg-red-100 px-2 py-1 rounded text-xs block mt-1">cd whatsapp-standalone && npm start</code>
             </div>
@@ -355,7 +358,7 @@ export const WhatsAppEmergency: React.FC = () => {
                 {/* BOTÕES DE AÇÃO EMERGENCIAL */}
                 <div className="flex justify-center space-x-4">
                   <button
-                    onClick={fetchQRCodeDirect}
+                    onClick={fetchQRCodeFromStandalone}
                     className="flex items-center space-x-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                   >
                     <RefreshCw className="w-5 h-5" />
