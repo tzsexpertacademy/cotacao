@@ -28,6 +28,7 @@ export const WhatsAppEmergency: React.FC = () => {
   const [lastUpdate, setLastUpdate] = useState<string>('');
   const [attempts, setAttempts] = useState(0);
   const [debugInfo, setDebugInfo] = useState<any>({});
+  const [connectionError, setConnectionError] = useState<string>('');
 
   // 🔥 URLS FIXAS - EXATAMENTE COMO VOCÊ ESPECIFICOU
   const SERVER_BASE = 'http://146.59.227.248:3001';
@@ -47,6 +48,7 @@ export const WhatsAppEmergency: React.FC = () => {
   const fetchQRCodeFromStandalone = async () => {
     setLastUpdate(new Date().toLocaleTimeString());
     setAttempts(prev => prev + 1);
+    setConnectionError('');
     
     console.log('🔥 CONECTANDO AO WHATSAPP-STANDALONE - TENTATIVA', attempts + 1);
     console.log('🌐 URL FIXA:', ENDPOINTS.status);
@@ -73,7 +75,9 @@ export const WhatsAppEmergency: React.FC = () => {
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json'
-        }
+        },
+        // Add timeout to prevent hanging requests
+        signal: AbortSignal.timeout(10000) // 10 second timeout
       });
 
       console.log('📊 Status response:', statusResponse.status);
@@ -103,7 +107,8 @@ export const WhatsAppEmergency: React.FC = () => {
             headers: {
               'Accept': 'application/json',
               'Content-Type': 'application/json'
-            }
+            },
+            signal: AbortSignal.timeout(10000) // 10 second timeout
           });
 
           console.log('📱 QR response:', qrResponse.status);
@@ -142,15 +147,38 @@ export const WhatsAppEmergency: React.FC = () => {
         throw new Error(`Status API retornou: ${statusResponse.status}`);
       }
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Erro ao conectar com Standalone:', error);
       setServerStatus('offline');
+      
+      // Better error handling with specific error types
+      let errorMessage = 'Erro desconhecido';
+      let errorDetails = '';
+      
+      if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
+        errorMessage = 'Falha na conexão com o servidor';
+        errorDetails = 'Possíveis causas: CORS, servidor offline, firewall bloqueando porta 3001, ou mixed content (HTTPS→HTTP)';
+      } else if (error.name === 'AbortError') {
+        errorMessage = 'Timeout na conexão';
+        errorDetails = 'O servidor demorou mais de 10 segundos para responder';
+      } else if (error.message.includes('NetworkError')) {
+        errorMessage = 'Erro de rede';
+        errorDetails = 'Verifique sua conexão com a internet e se o servidor está acessível';
+      } else {
+        errorMessage = error.message || 'Erro desconhecido';
+        errorDetails = error.toString();
+      }
+      
+      setConnectionError(errorMessage);
       setDebugInfo(prev => ({ 
         ...prev, 
-        error: error.toString(),
-        lastError: error.message
+        error: errorDetails,
+        lastError: errorMessage,
+        errorType: error.name,
+        errorTime: new Date().toLocaleTimeString()
       }));
-      toast.error('Erro ao conectar: ' + error.message);
+      
+      toast.error(`Erro ao conectar: ${errorMessage}`);
     }
   };
 
@@ -167,7 +195,8 @@ export const WhatsAppEmergency: React.FC = () => {
         credentials: 'omit',
         headers: {
           'Content-Type': 'application/json'
-        }
+        },
+        signal: AbortSignal.timeout(15000) // 15 second timeout for restart
       });
 
       if (response.ok) {
@@ -183,23 +212,29 @@ export const WhatsAppEmergency: React.FC = () => {
       } else {
         throw new Error(`Restart falhou: ${response.status}`);
       }
-    } catch (error) {
-      toast.error('Erro ao reiniciar WhatsApp: ' + error.message);
+    } catch (error: any) {
+      let errorMessage = 'Erro ao reiniciar WhatsApp';
+      if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
+        errorMessage = 'Falha na conexão - verifique se o servidor está rodando';
+      } else if (error.name === 'AbortError') {
+        errorMessage = 'Timeout no restart - operação demorou muito';
+      }
+      toast.error(errorMessage + ': ' + (error.message || 'Erro desconhecido'));
     }
   };
 
-  // POLLING AUTOMÁTICO A CADA 3 SEGUNDOS
+  // POLLING AUTOMÁTICO A CADA 5 SEGUNDOS (aumentado para reduzir carga)
   useEffect(() => {
     fetchQRCodeFromStandalone();
     
     const interval = setInterval(() => {
-      if (!isConnected) {
+      if (!isConnected && serverStatus !== 'connecting') {
         fetchQRCodeFromStandalone();
       }
-    }, 3000);
+    }, 5000); // Increased to 5 seconds to reduce server load
 
     return () => clearInterval(interval);
-  }, [isConnected]);
+  }, [isConnected, serverStatus]);
 
   const getStatusColor = () => {
     if (serverStatus === 'offline') return 'bg-red-500';
@@ -254,15 +289,17 @@ export const WhatsAppEmergency: React.FC = () => {
               
               <button
                 onClick={fetchQRCodeFromStandalone}
-                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                disabled={serverStatus === 'connecting'}
+                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <RefreshCw className="w-4 h-4" />
+                <RefreshCw className={`w-4 h-4 ${serverStatus === 'connecting' ? 'animate-spin' : ''}`} />
                 <span>Buscar QR</span>
               </button>
               
               <button
                 onClick={restartWhatsApp}
-                className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                disabled={serverStatus === 'connecting'}
+                className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Zap className="w-4 h-4" />
                 <span>Reiniciar</span>
@@ -270,6 +307,44 @@ export const WhatsAppEmergency: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* ERRO DE CONEXÃO DETALHADO */}
+        {connectionError && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center space-x-2 mb-3">
+              <AlertTriangle className="w-5 h-5 text-red-600" />
+              <p className="text-red-800 font-medium">❌ Erro de Conexão: {connectionError}</p>
+            </div>
+            
+            <div className="text-sm text-red-700 space-y-2">
+              <div className="bg-red-100 p-3 rounded">
+                <p className="font-medium">🔧 Soluções possíveis:</p>
+                <ul className="list-disc list-inside mt-2 space-y-1">
+                  <li><strong>Acesse via HTTP:</strong> Tente acessar a aplicação em <code className="bg-red-200 px-1 rounded">http://localhost:5173</code> ao invés de HTTPS</li>
+                  <li><strong>Verifique o servidor:</strong> Confirme se o servidor está rodando em <code className="bg-red-200 px-1 rounded">{SERVER_BASE}</code></li>
+                  <li><strong>Firewall:</strong> Verifique se a porta 3001 está aberta no servidor</li>
+                  <li><strong>CORS:</strong> O servidor pode estar bloqueando requisições cross-origin</li>
+                </ul>
+              </div>
+              
+              <div className="bg-red-100 p-3 rounded">
+                <p className="font-medium">🖥️ Para iniciar o servidor:</p>
+                <code className="bg-red-200 px-2 py-1 rounded text-xs block mt-1">
+                  cd /home/ubuntu/cotacao/whatsapp-standalone && npm start
+                </code>
+              </div>
+              
+              {debugInfo.errorType && (
+                <div className="bg-red-100 p-3 rounded">
+                  <p className="font-medium">🐛 Detalhes técnicos:</p>
+                  <p><strong>Tipo:</strong> {debugInfo.errorType}</p>
+                  <p><strong>Horário:</strong> {debugInfo.errorTime}</p>
+                  <p><strong>Detalhes:</strong> {debugInfo.error}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* DEBUG INFO DETALHADO - URLs FIXAS */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
@@ -350,7 +425,8 @@ export const WhatsAppEmergency: React.FC = () => {
               </div>
               <button
                 onClick={fetchQRCodeFromStandalone}
-                className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+                disabled={serverStatus === 'connecting'}
+                className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:opacity-50"
               >
                 Tentar Novamente
               </button>
@@ -438,7 +514,7 @@ export const WhatsAppEmergency: React.FC = () => {
                 </div>
                 
                 <div className="text-sm text-gray-600 space-y-1">
-                  <p>🔄 Atualizando automaticamente a cada 3 segundos</p>
+                  <p>🔄 Atualizando automaticamente a cada 5 segundos</p>
                   <p>🔒 Conexão segura e criptografada</p>
                   <p>⚡ QR Code REAL do servidor Standalone</p>
                   <p>📡 API: {ENDPOINTS.qr}</p>
@@ -478,15 +554,17 @@ export const WhatsAppEmergency: React.FC = () => {
                 <div className="flex justify-center space-x-4">
                   <button
                     onClick={fetchQRCodeFromStandalone}
-                    className="flex items-center space-x-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    disabled={serverStatus === 'connecting'}
+                    className="flex items-center space-x-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <RefreshCw className="w-5 h-5" />
+                    <RefreshCw className={`w-5 h-5 ${serverStatus === 'connecting' ? 'animate-spin' : ''}`} />
                     <span>Buscar QR Code REAL</span>
                   </button>
                   
                   <button
                     onClick={restartWhatsApp}
-                    className="flex items-center space-x-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                    disabled={serverStatus === 'connecting'}
+                    className="flex items-center space-x-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Zap className="w-5 h-5" />
                     <span>Reiniciar WhatsApp</span>
