@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, BarChart3, Upload as UploadIcon, Settings, Download, MessageSquare, Brain, ShoppingCart } from 'lucide-react';
+import { FileText, BarChart3, Upload as UploadIcon, Settings, Download, MessageSquare, Brain, ShoppingCart, TestTube } from 'lucide-react';
 import { SmartUploadArea } from './components/SmartUploadArea';
 import { ComparacaoTable } from './components/ComparacaoTable';
 import { Dashboard } from './components/Dashboard';
 import { ConfigurationPanel } from './components/ConfigurationPanel';
 import { WhatsAppEmergency } from './components/WhatsAppEmergency';
 import { WhatsAppCotacoesManager } from './components/WhatsAppCotacoesManager';
+import { WhatsAppTestModule } from './components/WhatsAppTestModule';
 import { ListaComprasManager } from './components/ListaComprasManager';
 import { DocumentoUpload, AnaliseCompleta, FiltrosComparacao } from './types';
 import { databaseService } from './services/database';
 import { Toaster } from 'react-hot-toast';
 
-type TabAtiva = 'whatsapp' | 'dashboard' | 'upload' | 'comparacao' | 'whatsapp-cotacoes' | 'lista-compras' | 'configuracoes';
+type TabAtiva = 'whatsapp' | 'dashboard' | 'upload' | 'comparacao' | 'whatsapp-cotacoes' | 'whatsapp-teste' | 'lista-compras' | 'configuracoes';
 
 function App() {
   const [tabAtiva, setTabAtiva] = useState<TabAtiva>('whatsapp');
@@ -93,6 +94,7 @@ function App() {
     { id: 'upload' as TabAtiva, label: 'Upload Inteligente', icon: UploadIcon },
     { id: 'comparacao' as TabAtiva, label: 'Comparação', icon: FileText },
     { id: 'whatsapp-cotacoes' as TabAtiva, label: 'Cotações WhatsApp', icon: Brain },
+    { id: 'whatsapp-teste' as TabAtiva, label: 'Teste WhatsApp', icon: TestTube },
     { id: 'lista-compras' as TabAtiva, label: 'Lista de Compras', icon: ShoppingCart },
     { id: 'configuracoes' as TabAtiva, label: 'Configurações', icon: Settings }
   ];
@@ -249,6 +251,10 @@ function App() {
             
             <WhatsAppCotacoesManager />
           </div>
+        )}
+
+        {tabAtiva === 'whatsapp-teste' && (
+          <WhatsAppTestModule />
         )}
 
         {tabAtiva === 'lista-compras' && (
