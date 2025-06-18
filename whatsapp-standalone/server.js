@@ -16,7 +16,7 @@ const io = new Server(server, {
   }
 });
 
-// 🔥 CORS MÁXIMO - ACEITA TUDO
+// 🔥 CORS MÁXIMO - ACEITA TUDO DE QUALQUER LUGAR
 app.use(cors({
   origin: "*",
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -27,7 +27,7 @@ app.use(cors({
 
 app.use(express.json());
 
-// 🔥 MIDDLEWARE CORS MANUAL PARA GARANTIR
+// 🔥 MIDDLEWARE CORS MANUAL PARA GARANTIR 100%
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -35,7 +35,7 @@ app.use((req, res, next) => {
   res.header('Access-Control-Max-Age', '86400');
   
   if (req.method === 'OPTIONS') {
-    console.log('🔧 Requisição OPTIONS recebida de:', req.get('Origin'));
+    console.log('🔧 Requisição OPTIONS recebida de:', req.get('Origin') || 'unknown');
     return res.status(200).end();
   }
   
@@ -49,6 +49,7 @@ let qrCodeString = null;
 
 console.log('🚀 Iniciando servidor WhatsApp STANDALONE...');
 console.log('🔥 CORS LIBERADO PARA TODOS OS DOMÍNIOS!');
+console.log('📁 Pasta correta: /home/ubuntu/cotacao/whatsapp-standalone/');
 
 // Inicializar cliente WhatsApp
 const initializeWhatsApp = () => {
@@ -214,7 +215,7 @@ app.get('/api/whatsapp/status', (req, res) => {
     isReady: isClientReady,
     hasQR: qrCodeString !== null,
     timestamp: new Date().toISOString(),
-    server: 'standalone'
+    server: 'standalone-correct-folder'
   };
   console.log('📊 Retornando status:', status);
   res.json(status);
@@ -227,14 +228,16 @@ app.get('/api/whatsapp/qr', (req, res) => {
     res.json({ 
       qr: qrCodeString,
       timestamp: new Date().toISOString(),
-      length: qrCodeString.length
+      length: qrCodeString.length,
+      folder: 'whatsapp-standalone-correct'
     });
   } else {
     console.log('❌ QR Code não disponível');
     res.status(404).json({ 
       error: 'QR Code não disponível',
       isReady: isClientReady,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      folder: 'whatsapp-standalone-correct'
     });
   }
 });
@@ -375,7 +378,7 @@ app.get('/', (req, res) => {
   res.send(`
     <html>
       <head>
-        <title>WhatsApp Standalone Server</title>
+        <title>WhatsApp Standalone Server - PASTA CORRETA</title>
         <style>
           body { font-family: Arial; max-width: 800px; margin: 50px auto; padding: 20px; }
           .success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 15px; border-radius: 5px; margin: 20px 0; }
@@ -384,12 +387,13 @@ app.get('/', (req, res) => {
         </style>
       </head>
       <body>
-        <h1>🚀 WhatsApp Standalone Server</h1>
+        <h1>🚀 WhatsApp Standalone Server - PASTA CORRETA</h1>
         
         <div class="success">
           <h3>✅ SERVIDOR WHATSAPP FUNCIONANDO!</h3>
           <p><strong>Servidor dedicado apenas para WhatsApp!</strong></p>
           <p><strong>CORS MÁXIMO LIBERADO!</strong></p>
+          <p><strong>🎯 PASTA CORRETA: cotacao/whatsapp-standalone/</strong></p>
         </div>
         
         <div class="status">
@@ -403,10 +407,11 @@ app.get('/', (req, res) => {
 
         <div class="debug">
           <h3>🔧 Debug Info</h3>
-          <p><strong>Caminho:</strong> /home/ubuntu/cotacao/whatsapp-standalone/</p>
+          <p><strong>Pasta Correta:</strong> /home/ubuntu/cotacao/whatsapp-standalone/</p>
           <p><strong>Comando:</strong> npm start</p>
           <p><strong>Headers CORS:</strong> Access-Control-Allow-Origin: *</p>
           <p><strong>Methods:</strong> GET, POST, PUT, DELETE, OPTIONS</p>
+          <p><strong>Status:</strong> PASTA CORRETA IDENTIFICADA!</p>
         </div>
 
         <div>
@@ -424,6 +429,7 @@ app.get('/', (req, res) => {
           <p>2. QR Code aparece na tela</p>
           <p>3. Cliente escaneia com WhatsApp</p>
           <p>4. Sistema funciona 100% real!</p>
+          <p><strong>5. PASTA CORRETA SENDO USADA!</strong></p>
         </div>
       </body>
     </html>
@@ -438,7 +444,8 @@ io.on('connection', (socket) => {
   socket.emit('status', {
     isReady: isClientReady,
     hasQR: qrCodeString !== null,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    folder: 'correct-whatsapp-standalone'
   });
 
   if (qrCodeString) {
@@ -461,7 +468,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('🔥 SERVIDOR DEDICADO APENAS PARA WHATSAPP!');
   console.log('🔥 CORS MÁXIMO LIBERADO PARA TODOS OS DOMÍNIOS!');
-  console.log('📁 Caminho: /home/ubuntu/cotacao/whatsapp-standalone/');
+  console.log('📁 Pasta correta: /home/ubuntu/cotacao/whatsapp-standalone/');
   console.log('');
   
   // Inicializar WhatsApp
