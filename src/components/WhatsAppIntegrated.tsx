@@ -40,11 +40,11 @@ interface WhatsAppUser {
   number: string;
 }
 
-// Múltiplas URLs para tentar conectar
+// Múltiplas URLs para tentar conectar - CORRIGIDO PARA PORTA 3005
 const SERVER_URLS = [
-  'http://146.59.227.248:3001',
-  'http://localhost:3001',
-  'http://127.0.0.1:3001'
+  'http://146.59.227.248:3005',
+  'http://localhost:3005',
+  'http://127.0.0.1:3005'
 ];
 
 export const WhatsAppIntegrated: React.FC = () => {
@@ -219,7 +219,7 @@ export const WhatsAppIntegrated: React.FC = () => {
     
     if (!workingServer) {
       setServerStatus('offline');
-      setConnectionError('Nenhum servidor WhatsApp encontrado. Verifique se o comando "npm run whatsapp-server" está rodando.');
+      setConnectionError('Nenhum servidor WhatsApp encontrado. Verifique se o comando "npm run whatsapp-integrated" está rodando na porta 3005.');
       return;
     }
     
@@ -647,7 +647,7 @@ export const WhatsAppIntegrated: React.FC = () => {
                   {serverStatus === 'offline' && (
                     <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                       <p className="text-red-800 text-sm">
-                        ⚠️ Servidor offline. Verifique se o comando `npm run whatsapp-server` está rodando.
+                        ⚠️ Servidor offline. Verifique se o comando `npm run whatsapp-integrated` está rodando na porta 3005.
                       </p>
                     </div>
                   )}
