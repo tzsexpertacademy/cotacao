@@ -4,14 +4,14 @@ import { SmartUploadArea } from './components/SmartUploadArea';
 import { ComparacaoTable } from './components/ComparacaoTable';
 import { Dashboard } from './components/Dashboard';
 import { ConfigurationPanel } from './components/ConfigurationPanel';
-import { WhatsAppIntegrated } from './components/WhatsAppIntegrated';
+import { WhatsAppEmergency } from './components/WhatsAppEmergency';
 import { WhatsAppCotacoesManager } from './components/WhatsAppCotacoesManager';
 import { ListaComprasManager } from './components/ListaComprasManager';
 import { DocumentoUpload, AnaliseCompleta, FiltrosComparacao } from './types';
 import { databaseService } from './services/database';
 import { Toaster } from 'react-hot-toast';
 
-type TabAtiva = 'dashboard' | 'upload' | 'comparacao' | 'whatsapp' | 'whatsapp-cotacoes' | 'lista-compras' | 'configuracoes';
+type TabAtiva = 'whatsapp' | 'dashboard' | 'upload' | 'comparacao' | 'whatsapp-cotacoes' | 'lista-compras' | 'configuracoes';
 
 function App() {
   const [tabAtiva, setTabAtiva] = useState<TabAtiva>('whatsapp');
@@ -88,7 +88,7 @@ function App() {
   const analiseAtual = analises[analises.length - 1];
 
   const tabs = [
-    { id: 'whatsapp' as TabAtiva, label: 'WhatsApp', icon: MessageSquare },
+    { id: 'whatsapp' as TabAtiva, label: 'WhatsApp - APRESENTAÇÃO', icon: MessageSquare },
     { id: 'dashboard' as TabAtiva, label: 'Dashboard', icon: BarChart3 },
     { id: 'upload' as TabAtiva, label: 'Upload Inteligente', icon: UploadIcon },
     { id: 'comparacao' as TabAtiva, label: 'Comparação', icon: FileText },
@@ -136,7 +136,7 @@ function App() {
                 </div>
                 <div>
                   <h1 className="text-xl font-bold text-gray-900">
-                    AnáliseCorp AI
+                    AnáliseCorp AI - DEMO CLIENTE
                   </h1>
                   <p className="text-sm text-gray-600">
                     Sistema Inteligente de Análise de Cotações
@@ -146,6 +146,9 @@ function App() {
             </div>
             
             <div className="flex items-center space-x-3">
+              <div className="px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full font-medium">
+                🎯 APRESENTAÇÃO CLIENTE
+              </div>
               <button
                 onClick={exportarRelatorio}
                 disabled={!analiseAtual}
@@ -186,6 +189,10 @@ function App() {
 
       {/* Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {tabAtiva === 'whatsapp' && (
+          <WhatsAppEmergency />
+        )}
+
         {tabAtiva === 'dashboard' && (
           <Dashboard analises={analises} />
         )}
@@ -225,21 +232,6 @@ function App() {
               filtros={filtros}
               onFiltrosChange={setFiltros}
             />
-          </div>
-        )}
-
-        {tabAtiva === 'whatsapp' && (
-          <div className="space-y-6">
-            <div className="text-center">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                WhatsApp Integrado
-              </h2>
-              <p className="text-gray-600 max-w-2xl mx-auto">
-                Conecte seu WhatsApp diretamente na plataforma. Cada usuário tem sua instância exclusiva e isolada.
-              </p>
-            </div>
-            
-            <WhatsAppIntegrated />
           </div>
         )}
 
