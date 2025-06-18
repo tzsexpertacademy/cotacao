@@ -241,6 +241,56 @@ app.get('/api/whatsapp/chats', async (req, res) => {
   }
 });
 
+app.get('/api/whatsapp/messages/:chatId', async (req, res) => {
+  if (!isClientReady) {
+    return res.status(400).json({ error: 'WhatsApp não está conectado' });
+  }
+
+  const { chatId } = req.params;
+  const { limit = 50 } = req.query;
+
+  try {
+    const chat = await client.getChatById(chatId);
+    const messages = await chat.fetchMessages({ limit: parseInt(limit) });
+    
+    const messageList = await Promise.all(messages.map(async (msg) => {
+      try {
+        const contact = await msg.getContact();
+        return {
+          id: msg.id._serialized,
+          body: msg.body,
+          timestamp: msg.timestamp,
+          fromMe: msg.fromMe,
+          hasMedia: msg.hasMedia,
+          type: msg.type,
+          contact: {
+            name: contact.name || contact.pushname || contact.number,
+            number: contact.number
+          }
+        };
+      } catch (error) {
+        return {
+          id: msg.id._serialized,
+          body: msg.body,
+          timestamp: msg.timestamp,
+          fromMe: msg.fromMe,
+          hasMedia: msg.hasMedia,
+          type: msg.type,
+          contact: {
+            name: 'Desconhecido',
+            number: msg.from
+          }
+        };
+      }
+    }));
+
+    res.json(messageList);
+  } catch (error) {
+    console.error('Erro ao buscar mensagens:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/whatsapp/restart', async (req, res) => {
   try {
     console.log('🔄 Reiniciando WhatsApp...');
