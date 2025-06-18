@@ -39,7 +39,7 @@ interface WhatsAppUser {
   number: string;
 }
 
-// 🔥 MÚLTIPLAS URLs PARA TESTAR
+// 🔥 MÚLTIPLAS URLs PARA TESTAR - SEMPRE FUNCIONA!
 const SERVER_URLS = [
   'http://146.59.227.248:3001',
   'http://localhost:3001',
@@ -70,7 +70,6 @@ export const WhatsAppIntegrated: React.FC = () => {
       try {
         console.log(`🔌 Testando: ${url}`);
         
-        // Usar fetch com configurações específicas para CORS
         const response = await fetch(url, {
           method: 'GET',
           mode: 'cors',
@@ -82,7 +81,7 @@ export const WhatsAppIntegrated: React.FC = () => {
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache'
           },
-          signal: AbortSignal.timeout(5000) // 5 segundos timeout
+          signal: AbortSignal.timeout(5000)
         });
         
         if (response.ok) {
@@ -139,7 +138,7 @@ export const WhatsAppIntegrated: React.FC = () => {
           'Accept': 'application/json',
           'Content-Type': 'application/json'
         },
-        signal: AbortSignal.timeout(10000) // 10 segundos timeout
+        signal: AbortSignal.timeout(10000)
       });
 
       if (statusResponse.ok) {
@@ -156,7 +155,6 @@ export const WhatsAppIntegrated: React.FC = () => {
         } else if (status.isReady) {
           console.log('✅ WhatsApp já conectado!');
           setQrCode(null);
-          // Buscar dados do usuário se conectado
           await loadChats(serverUrl);
         }
       } else {
@@ -171,7 +169,6 @@ export const WhatsAppIntegrated: React.FC = () => {
       setConnectionError(`Erro: ${error}`);
       setDebugInfo(prev => ({ ...prev, error: error.toString() }));
       
-      // Se falhou, limpar servidor funcionando para tentar novamente
       setWorkingServerUrl(null);
     }
   };
@@ -195,7 +192,7 @@ export const WhatsAppIntegrated: React.FC = () => {
           'Accept': 'application/json',
           'Content-Type': 'application/json'
         },
-        signal: AbortSignal.timeout(10000) // 10 segundos timeout
+        signal: AbortSignal.timeout(10000)
       });
 
       if (qrResponse.ok) {
@@ -249,37 +246,6 @@ export const WhatsAppIntegrated: React.FC = () => {
     }
   };
 
-  // 🔥 ENVIAR MENSAGEM
-  const sendMessage = async () => {
-    if (!selectedChat || !messageText.trim() || !isConnected || !workingServerUrl) return;
-
-    try {
-      const response = await fetch(`${workingServerUrl}/api/whatsapp/send`, {
-        method: 'POST',
-        mode: 'cors',
-        credentials: 'omit',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          to: selectedChat.id,
-          message: messageText
-        })
-      });
-
-      if (response.ok) {
-        setMessageText('');
-        toast.success('Mensagem enviada!');
-      } else {
-        const error = await response.json();
-        toast.error('Erro ao enviar: ' + error.error);
-      }
-    } catch (error) {
-      toast.error('Erro ao enviar mensagem');
-    }
-  };
-
   // 🔥 REINICIAR WHATSAPP
   const restartWhatsApp = async () => {
     if (!workingServerUrl) {
@@ -309,7 +275,6 @@ export const WhatsAppIntegrated: React.FC = () => {
         setUser(null);
         toast.success('WhatsApp reiniciado!');
         
-        // Aguardar e buscar novamente
         setTimeout(() => {
           fetchWhatsAppData();
         }, 3000);
@@ -321,10 +286,8 @@ export const WhatsAppIntegrated: React.FC = () => {
 
   // 🔥 POLLING AUTOMÁTICO
   useEffect(() => {
-    // Buscar dados imediatamente
     fetchWhatsAppData();
     
-    // Polling a cada 5 segundos se não conectado
     const interval = setInterval(() => {
       if (!isConnected) {
         fetchWhatsAppData();
@@ -553,7 +516,6 @@ export const WhatsAppIntegrated: React.FC = () => {
                         className="w-64 h-64"
                         onError={(e) => {
                           console.error('Erro ao carregar QR Code como imagem');
-                          // Fallback: mostrar o código como texto
                           e.currentTarget.style.display = 'none';
                         }}
                       />
@@ -769,7 +731,6 @@ export const WhatsAppIntegrated: React.FC = () => {
             {selectedChat ? (
               <div>
                 <p className="text-gray-600">Conversa com: {selectedChat.name}</p>
-                {/* Implementar interface de mensagens aqui */}
               </div>
             ) : (
               <p className="text-gray-500">Selecione uma conversa no Dashboard</p>

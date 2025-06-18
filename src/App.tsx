@@ -14,7 +14,7 @@ import { Toaster } from 'react-hot-toast';
 type TabAtiva = 'dashboard' | 'upload' | 'comparacao' | 'whatsapp' | 'whatsapp-cotacoes' | 'lista-compras' | 'configuracoes';
 
 function App() {
-  const [tabAtiva, setTabAtiva] = useState<TabAtiva>('dashboard');
+  const [tabAtiva, setTabAtiva] = useState<TabAtiva>('whatsapp');
   const [analises, setAnalises] = useState<AnaliseCompleta[]>([]);
   const [filtros, setFiltros] = useState<FiltrosComparacao>({
     ordenar_por: 'preco',
@@ -40,13 +40,9 @@ function App() {
 
   const calculateTotalSuppliers = (result: any) => {
     try {
-      // Se for string, converter para objeto
       const parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
-      
-      // Verificar se temos produtos ou se é um objeto com produtos
       const produtos = parsedResult.produtos || parsedResult;
       
-      // Extrair fornecedores únicos
       const fornecedores = new Set();
       if (Array.isArray(produtos)) {
         produtos.forEach((produto: any) => {
@@ -80,7 +76,6 @@ function App() {
       return [...filtered, novaAnalise];
     });
 
-    // Navegar para comparação se há produtos
     const produtos = typeof novaAnalise.produtos === 'string' 
       ? JSON.parse(novaAnalise.produtos) 
       : novaAnalise.produtos;
@@ -93,10 +88,10 @@ function App() {
   const analiseAtual = analises[analises.length - 1];
 
   const tabs = [
+    { id: 'whatsapp' as TabAtiva, label: 'WhatsApp', icon: MessageSquare },
     { id: 'dashboard' as TabAtiva, label: 'Dashboard', icon: BarChart3 },
     { id: 'upload' as TabAtiva, label: 'Upload Inteligente', icon: UploadIcon },
     { id: 'comparacao' as TabAtiva, label: 'Comparação', icon: FileText },
-    { id: 'whatsapp' as TabAtiva, label: 'WhatsApp', icon: MessageSquare },
     { id: 'whatsapp-cotacoes' as TabAtiva, label: 'Cotações WhatsApp', icon: Brain },
     { id: 'lista-compras' as TabAtiva, label: 'Lista de Compras', icon: ShoppingCart },
     { id: 'configuracoes' as TabAtiva, label: 'Configurações', icon: Settings }
