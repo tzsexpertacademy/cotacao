@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { MessageSquare, QrCode, Wifi, WifiOff, RefreshCw, Send, Users, MessageCircle, User, CheckCircle, AlertTriangle, Smartphone, Copy, Trash2 } from 'lucide-react';
-import io from 'socket.io-client';
 import toast from 'react-hot-toast';
 
 interface WhatsAppMessage {
@@ -40,18 +39,13 @@ interface WhatsAppUser {
   number: string;
 }
 
-// 🔥 CORRIGIDO: Usar porta 3001 (onde o servidor realmente está)
-const SERVER_URLS = [
-  'http://146.59.227.248:3001',  // Servidor principal
-  'http://localhost:3001',       // Local development
-  'http://127.0.0.1:3001'        // Fallback local
-];
+// 🔥 SERVIDOR FIXO - SEU SERVIDOR REAL
+const SERVER_URL = 'http://146.59.227.248:3001';
 
 export const WhatsAppIntegrated: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'connect' | 'dashboard' | 'messages'>('connect');
   const [isConnected, setIsConnected] = useState(false);
   const [qrCode, setQrCode] = useState<string | null>(null);
-  const [socket, setSocket] = useState<any>(null);
   const [messages, setMessages] = useState<WhatsAppMessage[]>([]);
   const [chats, setChats] = useState<WhatsAppChat[]>([]);
   const [selectedChat, setSelectedChat] = useState<WhatsAppChat | null>(null);
@@ -60,263 +54,118 @@ export const WhatsAppIntegrated: React.FC = () => {
   const [user, setUser] = useState<WhatsAppUser | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
-  const [currentServerUrl, setCurrentServerUrl] = useState<string>('');
-  const [lastQrFetch, setLastQrFetch] = useState<number>(0);
+  const [debugInfo, setDebugInfo] = useState<any>({});
 
-  // Função para testar conectividade com múltiplas URLs
-  const findWorkingServer = async (): Promise<string | null> => {
-    console.log('🔍 Procurando servidor WhatsApp disponível...');
+  // 🔥 FUNÇÃO PRINCIPAL - BUSCAR STATUS E QR CODE
+  const fetchWhatsAppData = async () => {
+    console.log('🔍 Buscando dados do WhatsApp...');
+    setDebugInfo(prev => ({ ...prev, lastFetch: new Date().toLocaleTimeString() }));
     
-    for (const url of SERVER_URLS) {
-      try {
-        console.log(`🔌 Testando: ${url}`);
-        const response = await fetch(`${url}/api/whatsapp/status`, { 
-          method: 'GET',
-          mode: 'cors',
-          cache: 'no-cache',
-          signal: AbortSignal.timeout(5000) // 5 second timeout
-        });
+    try {
+      setServerStatus('connecting');
+      setConnectionError(null);
+
+      // 1. TESTAR CONECTIVIDADE BÁSICA
+      console.log('📡 Testando conectividade...');
+      const pingResponse = await fetch(SERVER_URL, { 
+        method: 'GET',
+        mode: 'cors',
+        cache: 'no-cache'
+      });
+      
+      if (!pingResponse.ok) {
+        throw new Error(`Servidor não responde: ${pingResponse.status}`);
+      }
+      
+      console.log('✅ Servidor respondeu!');
+      setServerStatus('online');
+      setDebugInfo(prev => ({ ...prev, serverPing: 'OK', serverStatus: pingResponse.status }));
+
+      // 2. BUSCAR STATUS DO WHATSAPP
+      console.log('📊 Buscando status...');
+      const statusResponse = await fetch(`${SERVER_URL}/api/whatsapp/status`, {
+        method: 'GET',
+        mode: 'cors',
+        cache: 'no-cache',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (statusResponse.ok) {
+        const status = await statusResponse.json();
+        console.log('📊 Status recebido:', status);
+        setDebugInfo(prev => ({ ...prev, status }));
         
-        if (response.ok) {
-          console.log(`✅ Servidor encontrado: ${url}`);
-          return url;
+        setIsConnected(status.isReady || false);
+        
+        // 3. SE TEM QR CODE DISPONÍVEL, BUSCAR
+        if (status.hasQR && !status.isReady) {
+          console.log('📱 QR Code disponível! Buscando...');
+          await fetchQRCode();
+        } else if (status.isReady) {
+          console.log('✅ WhatsApp já conectado!');
+          setQrCode(null);
+          // Buscar dados do usuário se conectado
+          await loadChats();
         }
-      } catch (error) {
-        console.log(`❌ Falhou: ${url} - ${error}`);
-      }
-    }
-    
-    console.log('⚠️ Nenhum servidor respondeu');
-    return null;
-  };
-
-  // Função para buscar QR Code via API REST
-  const fetchQRCodeAPI = async (serverUrl: string): Promise<string | null> => {
-    try {
-      console.log('🔍 Buscando QR Code via API...');
-      const response = await fetch(`${serverUrl}/api/whatsapp/qr`, {
-        method: 'GET',
-        mode: 'cors',
-        cache: 'no-cache',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        signal: AbortSignal.timeout(10000) // 10 second timeout
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('✅ QR Code recebido via API');
-        return data.qr;
-      } else if (response.status === 404) {
-        console.log('⏳ QR Code ainda não disponível (404)');
-        return null;
       } else {
-        console.log('❌ Erro ao buscar QR Code:', response.status);
-        return null;
+        console.error('❌ Erro no status:', statusResponse.status);
+        setDebugInfo(prev => ({ ...prev, statusError: statusResponse.status }));
       }
+
     } catch (error) {
-      console.error('❌ Erro na API de QR Code:', error);
-      return null;
+      console.error('❌ Erro geral:', error);
+      setServerStatus('offline');
+      setConnectionError(`Erro: ${error}`);
+      setDebugInfo(prev => ({ ...prev, error: error.toString() }));
     }
   };
 
-  // Função para buscar status via API REST
-  const fetchStatusAPI = async (serverUrl: string): Promise<any> => {
+  // 🔥 BUSCAR QR CODE ESPECÍFICO
+  const fetchQRCode = async () => {
     try {
-      console.log('🔍 Buscando status via API...');
-      const response = await fetch(`${serverUrl}/api/whatsapp/status`, {
+      console.log('📱 Buscando QR Code...');
+      const qrResponse = await fetch(`${SERVER_URL}/api/whatsapp/qr`, {
         method: 'GET',
         mode: 'cors',
         cache: 'no-cache',
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json'
-        },
-        signal: AbortSignal.timeout(10000) // 10 second timeout
+        }
       });
-      
-      if (response.ok) {
-        const status = await response.json();
-        console.log('📊 Status recebido via API:', status);
-        return status;
+
+      if (qrResponse.ok) {
+        const qrData = await qrResponse.json();
+        console.log('✅ QR Code recebido!', qrData.qr ? 'Presente' : 'Vazio');
+        
+        if (qrData.qr) {
+          setQrCode(qrData.qr);
+          setDebugInfo(prev => ({ ...prev, qrCode: 'Recebido', qrLength: qrData.qr.length }));
+          toast.success('QR Code carregado! Escaneie com seu WhatsApp');
+        } else {
+          console.log('⚠️ QR Code vazio');
+          setDebugInfo(prev => ({ ...prev, qrCode: 'Vazio' }));
+        }
+      } else if (qrResponse.status === 404) {
+        console.log('⏳ QR Code ainda não disponível (404)');
+        setDebugInfo(prev => ({ ...prev, qrCode: 'Não disponível (404)' }));
+      } else {
+        console.error('❌ Erro no QR Code:', qrResponse.status);
+        setDebugInfo(prev => ({ ...prev, qrCodeError: qrResponse.status }));
       }
     } catch (error) {
-      console.error('❌ Erro na API de status:', error);
-    }
-    return null;
-  };
-
-  // Conectar via Socket.IO
-  const connectSocket = (serverUrl: string) => {
-    console.log('🔌 Tentando conectar Socket.IO em:', serverUrl);
-    
-    const newSocket = io(serverUrl, {
-      timeout: 10000,
-      forceNew: true,
-      transports: ['websocket', 'polling'],
-      autoConnect: true,
-      reconnection: true,
-      reconnectionAttempts: 3,
-      reconnectionDelay: 1000
-    });
-    
-    setSocket(newSocket);
-
-    newSocket.on('connect', () => {
-      console.log('✅ Socket.IO conectado!');
-      toast.success('Socket.IO conectado!');
-    });
-
-    newSocket.on('connect_error', (error) => {
-      console.error('❌ Erro Socket.IO:', error);
-      // Não desconecta aqui, deixa tentar reconectar
-    });
-
-    newSocket.on('qr', (qr: string) => {
-      console.log('📱 QR Code via Socket.IO!');
-      setQrCode(qr);
-      setIsConnected(false);
-      setLastQrFetch(Date.now());
-    });
-
-    newSocket.on('ready', (data: any) => {
-      console.log('🎉 WhatsApp conectado via Socket.IO!', data);
-      setIsConnected(true);
-      setQrCode(null);
-      setUser(data.user);
-      toast.success(`WhatsApp conectado como ${data.user.name}!`);
-    });
-
-    newSocket.on('message', (message: WhatsAppMessage) => {
-      console.log('💬 Nova mensagem via Socket.IO:', message);
-      setMessages(prev => [message, ...prev]);
-    });
-
-    newSocket.on('chats', (chatList: WhatsAppChat[]) => {
-      console.log(`💬 ${chatList.length} conversas via Socket.IO`);
-      setChats(chatList);
-    });
-
-    newSocket.on('status', (status: any) => {
-      console.log('📊 Status via Socket.IO:', status);
-      setIsConnected(status.isReady);
-      if (status.user) {
-        setUser(status.user);
-      }
-    });
-
-    return newSocket;
-  };
-
-  // Função principal de inicialização
-  const initializeConnection = async () => {
-    setServerStatus('connecting');
-    setConnectionError(null);
-    
-    console.log('🚀 Iniciando conexão com WhatsApp...');
-    
-    // 1. Encontrar servidor funcionando
-    const workingServer = await findWorkingServer();
-    
-    if (!workingServer) {
-      setServerStatus('offline');
-      setConnectionError('Nenhum servidor WhatsApp encontrado. Verifique se o comando "npm run whatsapp-server" está rodando na porta 3001.');
-      return;
-    }
-    
-    console.log('✅ Usando servidor:', workingServer);
-    setCurrentServerUrl(workingServer);
-    setServerStatus('online');
-    
-    // 2. Tentar Socket.IO (não bloqueante)
-    const socketConnection = connectSocket(workingServer);
-    
-    // 3. Buscar status inicial via API
-    const status = await fetchStatusAPI(workingServer);
-    if (status) {
-      setIsConnected(status.isReady);
-      if (status.user) {
-        setUser(status.user);
-      }
-      if (status.hasQR && !status.isReady) {
-        // Buscar QR Code se disponível
-        const qr = await fetchQRCodeAPI(workingServer);
-        if (qr) {
-          setQrCode(qr);
-          setLastQrFetch(Date.now());
-        }
-      }
-    } else {
-      // Se API não responder, tenta buscar QR Code mesmo assim
-      const qr = await fetchQRCodeAPI(workingServer);
-      if (qr) {
-        setQrCode(qr);
-        setLastQrFetch(Date.now());
-      }
+      console.error('❌ Erro ao buscar QR Code:', error);
+      setDebugInfo(prev => ({ ...prev, qrCodeError: error.toString() }));
     }
   };
 
-  // Polling para QR Code e status
-  useEffect(() => {
-    if (currentServerUrl && serverStatus === 'online' && !isConnected) {
-      const interval = setInterval(async () => {
-        const now = Date.now();
-        if (now - lastQrFetch > 5000) { // A cada 5 segundos
-          console.log('🔄 Polling QR Code e status...');
-          
-          // Verificar status primeiro
-          const status = await fetchStatusAPI(currentServerUrl);
-          if (status?.isReady) {
-            setIsConnected(true);
-            setQrCode(null);
-            if (status.user) {
-              setUser(status.user);
-              toast.success(`WhatsApp conectado como ${status.user.name}!`);
-            }
-            return; // Para o polling se conectou
-          }
-          
-          // Se não conectado, buscar QR Code
-          const qr = await fetchQRCodeAPI(currentServerUrl);
-          if (qr) {
-            setQrCode(qr);
-            setLastQrFetch(now);
-          }
-        }
-      }, 3000); // Polling a cada 3 segundos
-
-      return () => clearInterval(interval);
-    }
-  }, [currentServerUrl, serverStatus, isConnected, lastQrFetch]);
-
-  // Inicializar conexão ao montar componente
-  useEffect(() => {
-    initializeConnection();
-    
-    return () => {
-      if (socket) {
-        socket.disconnect();
-      }
-    };
-  }, []);
-
-  const retryConnection = () => {
-    setRetryCount(prev => prev + 1);
-    console.log(`🔄 Tentativa de reconexão #${retryCount + 1}`);
-    setQrCode(null);
-    setIsConnected(false);
-    setUser(null);
-    setCurrentServerUrl('');
-    initializeConnection();
-  };
-
+  // 🔥 CARREGAR CHATS
   const loadChats = async () => {
-    if (!currentServerUrl) return;
-    
     try {
-      const response = await fetch(`${currentServerUrl}/api/whatsapp/chats`, {
+      const response = await fetch(`${SERVER_URL}/api/whatsapp/chats`, {
         method: 'GET',
         mode: 'cors',
         headers: {
@@ -327,42 +176,20 @@ export const WhatsAppIntegrated: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         setChats(data);
+        console.log(`💬 ${data.length} conversas carregadas`);
         toast.success(`${data.length} conversas carregadas`);
       }
     } catch (error) {
       console.error('Erro ao carregar chats:', error);
-      toast.error('Erro ao carregar chats');
     }
   };
 
-  const loadChatMessages = async (chatId: string) => {
-    if (!currentServerUrl) return;
-    
-    try {
-      const response = await fetch(`${currentServerUrl}/api/whatsapp/messages/${chatId}`, {
-        method: 'GET',
-        mode: 'cors',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setMessages(data);
-        toast.success(`${data.length} mensagens carregadas`);
-      }
-    } catch (error) {
-      console.error('Erro ao carregar mensagens:', error);
-      toast.error('Erro ao carregar mensagens');
-    }
-  };
-
+  // 🔥 ENVIAR MENSAGEM
   const sendMessage = async () => {
-    if (!selectedChat || !messageText.trim() || !currentServerUrl) return;
+    if (!selectedChat || !messageText.trim() || !isConnected) return;
 
     try {
-      const response = await fetch(`${currentServerUrl}/api/whatsapp/send`, {
+      const response = await fetch(`${SERVER_URL}/api/whatsapp/send`, {
         method: 'POST',
         mode: 'cors',
         headers: {
@@ -387,11 +214,13 @@ export const WhatsAppIntegrated: React.FC = () => {
     }
   };
 
+  // 🔥 REINICIAR WHATSAPP
   const restartWhatsApp = async () => {
-    if (!currentServerUrl) return;
-    
     try {
-      const response = await fetch(`${currentServerUrl}/api/whatsapp/restart`, {
+      setRetryCount(prev => prev + 1);
+      console.log(`🔄 Reiniciando WhatsApp (tentativa ${retryCount + 1})...`);
+      
+      const response = await fetch(`${SERVER_URL}/api/whatsapp/restart`, {
         method: 'POST',
         mode: 'cors',
         headers: {
@@ -408,15 +237,30 @@ export const WhatsAppIntegrated: React.FC = () => {
         setUser(null);
         toast.success('WhatsApp reiniciado!');
         
-        // Reinicializar conexão
+        // Aguardar e buscar novamente
         setTimeout(() => {
-          initializeConnection();
+          fetchWhatsAppData();
         }, 3000);
       }
     } catch (error) {
       toast.error('Erro ao reiniciar WhatsApp');
     }
   };
+
+  // 🔥 POLLING AUTOMÁTICO
+  useEffect(() => {
+    // Buscar dados imediatamente
+    fetchWhatsAppData();
+    
+    // Polling a cada 5 segundos se não conectado
+    const interval = setInterval(() => {
+      if (!isConnected) {
+        fetchWhatsAppData();
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [isConnected]);
 
   const formatTime = (timestamp: number) => {
     return new Date(timestamp * 1000).toLocaleString('pt-BR');
@@ -461,11 +305,11 @@ export const WhatsAppIntegrated: React.FC = () => {
               <div className="flex items-center space-x-2 mt-1">
                 <span className="text-xs text-gray-500">Servidor:</span>
                 <code className="text-xs bg-blue-100 px-2 py-1 rounded">
-                  {currentServerUrl || 'Procurando...'}
+                  {SERVER_URL}
                 </code>
-                {socket?.connected && (
-                  <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Socket.IO ✓</span>
-                )}
+                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                  FIXO ✓
+                </span>
               </div>
             </div>
           </div>
@@ -477,11 +321,11 @@ export const WhatsAppIntegrated: React.FC = () => {
             </div>
             
             <button
-              onClick={retryConnection}
+              onClick={restartWhatsApp}
               className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               <RefreshCw className="w-4 h-4" />
-              <span>Reconectar</span>
+              <span>Reiniciar ({retryCount})</span>
             </button>
           </div>
         </div>
@@ -496,22 +340,13 @@ export const WhatsAppIntegrated: React.FC = () => {
               <p className="text-red-800 font-medium">Erro de Conexão</p>
             </div>
             <button
-              onClick={retryConnection}
+              onClick={fetchWhatsAppData}
               className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
             >
-              Tentar Novamente ({retryCount})
+              Tentar Novamente
             </button>
           </div>
           <p className="text-red-700 text-sm mt-1">{connectionError}</p>
-          <div className="mt-2 text-xs text-red-600">
-            <p>Servidores testados:</p>
-            <ul className="list-disc list-inside ml-2">
-              {SERVER_URLS.map(url => (
-                <li key={url}>{url}</li>
-              ))}
-            </ul>
-            <p className="mt-2 font-medium">💡 Execute no servidor: <code>npm run whatsapp-server</code></p>
-          </div>
         </div>
       )}
 
@@ -520,15 +355,41 @@ export const WhatsAppIntegrated: React.FC = () => {
         <div className="bg-green-50 border border-green-200 rounded-lg p-4">
           <div className="flex items-center space-x-2">
             <CheckCircle className="w-5 h-5 text-green-600" />
-            <p className="text-green-800 font-medium">✅ Conectado ao servidor WhatsApp Real!</p>
+            <p className="text-green-800 font-medium">✅ Conectado ao servidor WhatsApp!</p>
           </div>
           <p className="text-green-700 text-sm mt-1">
-            Servidor: {currentServerUrl} | 
-            Socket.IO: {socket?.connected ? '✅ Conectado' : '❌ Usando API REST'} |
-            Tentativas: {retryCount}
+            Servidor: {SERVER_URL} | Tentativas: {retryCount}
           </p>
         </div>
       )}
+
+      {/* Debug Info */}
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+        <h4 className="font-medium text-gray-900 mb-2">🔍 Debug Info (Tempo Real)</h4>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div>
+            <span className="font-medium">Última busca:</span>
+            <p className="text-gray-600">{debugInfo.lastFetch || 'Nunca'}</p>
+          </div>
+          <div>
+            <span className="font-medium">Status servidor:</span>
+            <p className="text-gray-600">{debugInfo.serverStatus || 'N/A'}</p>
+          </div>
+          <div>
+            <span className="font-medium">QR Code:</span>
+            <p className="text-gray-600">{debugInfo.qrCode || 'N/A'}</p>
+          </div>
+          <div>
+            <span className="font-medium">WhatsApp:</span>
+            <p className="text-gray-600">{isConnected ? 'Conectado' : 'Desconectado'}</p>
+          </div>
+        </div>
+        {debugInfo.status && (
+          <div className="mt-2 p-2 bg-white rounded text-xs">
+            <strong>Status completo:</strong> {JSON.stringify(debugInfo.status)}
+          </div>
+        )}
+      </div>
 
       {/* Navigation */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
@@ -563,33 +424,26 @@ export const WhatsAppIntegrated: React.FC = () => {
                 Conectar seu WhatsApp Real
               </h3>
               
-              {/* Debug Info */}
-              <div className="mb-6 p-4 bg-gray-50 rounded-lg text-left">
-                <h4 className="font-medium text-gray-900 mb-2">🔍 Status da Conexão:</h4>
-                <div className="text-sm text-gray-600 space-y-1">
-                  <p><strong>Servidor:</strong> {serverStatus}</p>
-                  <p><strong>URL Ativa:</strong> {currentServerUrl || 'Nenhuma'}</p>
-                  <p><strong>Socket.IO:</strong> {socket?.connected ? 'Conectado' : 'Desconectado'}</p>
-                  <p><strong>WhatsApp:</strong> {isConnected ? 'Conectado' : 'Desconectado'}</p>
-                  <p><strong>QR Code:</strong> {qrCode ? 'Disponível' : 'Não disponível'}</p>
-                  <p><strong>Tentativas:</strong> {retryCount}</p>
-                  <p><strong>Último QR:</strong> {lastQrFetch ? new Date(lastQrFetch).toLocaleTimeString() : 'Nunca'}</p>
-                </div>
-                <div className="flex space-x-2 mt-2">
-                  <button
-                    onClick={retryConnection}
-                    className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-                  >
-                    🔄 Forçar Reconexão
-                  </button>
-                  <button
-                    onClick={() => fetchQRCodeAPI(currentServerUrl)}
-                    className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
-                    disabled={!currentServerUrl}
-                  >
-                    📱 Buscar QR Code
-                  </button>
-                </div>
+              {/* Botões de Ação */}
+              <div className="mb-6 flex justify-center space-x-4">
+                <button
+                  onClick={fetchWhatsAppData}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  🔄 Buscar QR Code
+                </button>
+                <button
+                  onClick={fetchQRCode}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                >
+                  📱 Forçar QR Code
+                </button>
+                <button
+                  onClick={restartWhatsApp}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                >
+                  🔄 Reiniciar WhatsApp
+                </button>
               </div>
               
               {qrCode ? (
@@ -600,9 +454,29 @@ export const WhatsAppIntegrated: React.FC = () => {
                         src={`https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(qrCode)}`}
                         alt="QR Code WhatsApp" 
                         className="w-64 h-64"
+                        onError={(e) => {
+                          console.error('Erro ao carregar QR Code como imagem');
+                          // Fallback: mostrar o código como texto
+                          e.currentTarget.style.display = 'none';
+                        }}
                       />
                     </div>
                   </div>
+                  
+                  {/* QR Code como texto (backup) */}
+                  <div className="bg-gray-100 p-4 rounded-lg">
+                    <h4 className="font-medium text-gray-900 mb-2">QR Code (texto):</h4>
+                    <div className="text-xs font-mono bg-white p-2 rounded border max-h-32 overflow-y-auto">
+                      {qrCode}
+                    </div>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(qrCode)}
+                      className="mt-2 px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                    >
+                      📋 Copiar QR Code
+                    </button>
+                  </div>
+                  
                   <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                     <h4 className="font-medium text-green-900 mb-2">📱 Como conectar:</h4>
                     <ol className="text-sm text-green-800 space-y-1 list-decimal list-inside text-left max-w-md mx-auto">
@@ -614,7 +488,7 @@ export const WhatsAppIntegrated: React.FC = () => {
                     </ol>
                   </div>
                   <div className="text-sm text-gray-600">
-                    <p>⚡ QR Code do servidor real: {currentServerUrl}</p>
+                    <p>⚡ QR Code do servidor real: {SERVER_URL}</p>
                     <p>🔒 Conexão segura e criptografada</p>
                     <p>🔄 Atualização automática a cada 5 segundos</p>
                   </div>
@@ -643,7 +517,7 @@ export const WhatsAppIntegrated: React.FC = () => {
                   <div>
                     <h4 className="text-lg font-medium text-gray-900">Aguardando Conexão</h4>
                     <p className="text-gray-600">
-                      {serverStatus === 'connecting' ? 'Procurando servidor...' : 
+                      {serverStatus === 'connecting' ? 'Procurando QR Code...' : 
                        serverStatus === 'offline' ? 'Servidor offline' :
                        'Aguardando QR Code do servidor...'}
                     </p>
@@ -651,7 +525,7 @@ export const WhatsAppIntegrated: React.FC = () => {
                   {serverStatus === 'offline' && (
                     <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                       <p className="text-red-800 text-sm">
-                        ⚠️ Servidor offline. Execute no servidor: <code className="bg-red-100 px-2 py-1 rounded">npm run whatsapp-server</code>
+                        ⚠️ Servidor offline. Verifique se o comando está rodando na porta 3001.
                       </p>
                     </div>
                   )}
@@ -744,7 +618,6 @@ export const WhatsAppIntegrated: React.FC = () => {
                            onClick={() => {
                              setSelectedChat(chat);
                              setActiveTab('messages');
-                             loadChatMessages(chat.id);
                            }}>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-3">
@@ -794,149 +667,16 @@ export const WhatsAppIntegrated: React.FC = () => {
 
         {/* Messages Tab */}
         {activeTab === 'messages' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Chats List */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-              <div className="p-4 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">Suas Conversas</h3>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Mensagens</h3>
+            {selectedChat ? (
+              <div>
+                <p className="text-gray-600">Conversa com: {selectedChat.name}</p>
+                {/* Implementar interface de mensagens aqui */}
               </div>
-              <div className="divide-y divide-gray-200 max-h-96 overflow-y-auto">
-                {chats.map((chat) => (
-                  <button
-                    key={chat.id}
-                    onClick={() => {
-                      setSelectedChat(chat);
-                      loadChatMessages(chat.id);
-                    }}
-                    className={`w-full p-4 text-left hover:bg-gray-50 transition-colors ${
-                      selectedChat?.id === chat.id ? 'bg-green-50 border-l-4 border-green-500' : ''
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
-                          {chat.isGroup ? (
-                            <Users className="w-5 h-5 text-gray-600" />
-                          ) : (
-                            <User className="w-5 h-5 text-gray-600" />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-gray-900 truncate">{chat.name}</p>
-                          {chat.lastMessage && (
-                            <p className="text-sm text-gray-600 truncate">
-                              {chat.lastMessage.fromMe ? 'Você: ' : ''}{chat.lastMessage.body}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      {chat.unreadCount > 0 && (
-                        <div className="bg-green-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                          {chat.unreadCount}
-                        </div>
-                      )}
-                    </div>
-                  </button>
-                ))}
-                {chats.length === 0 && (
-                  <div className="p-8 text-center text-gray-500">
-                    {isConnected ? 'Carregue os chats no Dashboard' : 'Conecte o WhatsApp primeiro'}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Chat Area */}
-            <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-200">
-              {selectedChat ? (
-                <>
-                  <div className="p-4 border-b border-gray-200">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                        {selectedChat.isGroup ? (
-                          <Users className="w-5 h-5 text-green-600" />
-                        ) : (
-                          <User className="w-5 h-5 text-green-600" />
-                        )}
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-900">{selectedChat.name}</p>
-                        <p className="text-sm text-gray-600">
-                          {selectedChat.isGroup ? 'Grupo' : 'Contato'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="h-96 p-4 overflow-y-auto">
-                    <div className="space-y-4">
-                      {messages
-                        .slice(0, 50)
-                        .reverse()
-                        .map((message) => (
-                          <div
-                            key={message.id}
-                            className={`flex ${message.fromMe ? 'justify-end' : 'justify-start'}`}
-                          >
-                            <div
-                              className={`max-w-xs px-4 py-2 rounded-lg ${
-                                message.fromMe
-                                  ? 'bg-green-600 text-white'
-                                  : 'bg-gray-100 text-gray-900'
-                              }`}
-                            >
-                              {!message.fromMe && selectedChat.isGroup && (
-                                <p className="text-xs font-medium mb-1 text-green-600">
-                                  {message.contact?.name}
-                                </p>
-                              )}
-                              <p className="whitespace-pre-wrap">{message.body}</p>
-                              <p className={`text-xs mt-1 ${
-                                message.fromMe ? 'text-green-100' : 'text-gray-500'
-                              }`}>
-                                {formatTime(message.timestamp)}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-
-                  <div className="p-4 border-t border-gray-200">
-                    <div className="flex space-x-3">
-                      <textarea
-                        value={messageText}
-                        onChange={(e) => setMessageText(e.target.value)}
-                        placeholder="Digite sua mensagem..."
-                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
-                        rows={2}
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            sendMessage();
-                          }
-                        }}
-                        disabled={!isConnected}
-                      />
-                      <button
-                        onClick={sendMessage}
-                        disabled={!messageText.trim() || !isConnected}
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-                      >
-                        <Send className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="h-full flex items-center justify-center">
-                  <div className="text-center">
-                    <MessageCircle className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                    <p className="text-gray-500">Selecione uma conversa para começar</p>
-                  </div>
-                </div>
-              )}
-            </div>
+            ) : (
+              <p className="text-gray-500">Selecione uma conversa no Dashboard</p>
+            )}
           </div>
         )}
       </div>
